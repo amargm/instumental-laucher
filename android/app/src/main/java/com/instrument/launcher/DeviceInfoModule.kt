@@ -17,7 +17,7 @@ import com.facebook.react.bridge.*
 class DeviceInfoModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    override fun getName(): String = "DeviceInfo"
+    override fun getName(): String = "InstrumentDeviceInfo"
 
     @ReactMethod
     fun getBatteryLevel(promise: Promise) {

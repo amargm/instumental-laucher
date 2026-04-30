@@ -1,6 +1,7 @@
 import {NativeModules, NativeEventEmitter} from 'react-native';
 
-const {DeviceInfo} = NativeModules;
+const {InstrumentDeviceInfo} = NativeModules;
+const DeviceInfo = InstrumentDeviceInfo;
 
 export interface BatteryInfo {
   level: number;
