@@ -26,11 +26,11 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: 'main'
+        - pattern: 'master'
           include: true
     scripts:
       - name: Install dependencies
-        script: npm ci --legacy-peer-deps
+        script: npm install --legacy-peer-deps
       - name: Set Android SDK path
         script: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
       - name: Generate Gradle wrapper
@@ -81,7 +81,7 @@ workflows:
           include: true
     scripts:
       - name: Install dependencies
-        script: npm ci --legacy-peer-deps
+        script: npm install --legacy-peer-deps
       - name: Set Android SDK path
         script: echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
       - name: Decode keystore
