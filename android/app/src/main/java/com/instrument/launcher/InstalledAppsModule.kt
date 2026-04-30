@@ -114,15 +114,9 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun expandNotificationPanel(promise: Promise) {
-        try {
-            val service = reactApplicationContext.getSystemService("statusbar")
-            val statusBarManager = Class.forName("android.app.StatusBarManager")
-            val expand = statusBarManager.getMethod("expandNotificationsPanel")
-            expand.invoke(service)
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("ERROR", e.message)
-        }
+        // Removed: reflection-based StatusBarManager hack violates Play Store policy.
+        // Use DeviceInfo.openNotificationListenerSettings() instead.
+        promise.reject("DEPRECATED", "Use DeviceInfo module for notification access")
     }
 
     private fun drawableToBitmap(drawable: Drawable): Bitmap {

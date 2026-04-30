@@ -45,7 +45,7 @@ export async function openSystemSettings(): Promise<boolean> {
 }
 
 /**
- * Expand the system notification panel.
+ * @deprecated Use DeviceInfo module — openNotificationListenerSettings() instead.
  */
 export async function expandNotificationPanel(): Promise<boolean> {
   return InstalledApps.expandNotificationPanel();

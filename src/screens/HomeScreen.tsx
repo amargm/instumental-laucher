@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
-import {launchApp, expandNotificationPanel} from '../native/InstalledApps';
+import {launchApp} from '../native/InstalledApps';
+import {getBatteryLevel, getNotificationCount} from '../native/DeviceInfo';
 import {
   PhoneIcon,
   GmailIcon,
@@ -30,6 +31,8 @@ interface Props {
 
 const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [time, setTime] = useState('');
+  const [battery, setBattery] = useState(0);
+  const [notifCount, setNotifCount] = useState(0);
 
   // Launcher home — disable back button
   useEffect(() => {
@@ -58,6 +61,23 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch real device metrics
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const b = await getBatteryLevel();
+        setBattery(b);
+      } catch (e) {}
+      try {
+        const n = await getNotificationCount();
+        setNotifCount(n);
+      } catch (e) {}
+    };
+    fetchMetrics();
+    const metricsInterval = setInterval(fetchMetrics, 30000);
+    return () => clearInterval(metricsInterval);
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
@@ -68,10 +88,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         <Text style={styles.date}>{date}</Text>
 
         <View style={styles.metrics}>
-          <Metric value="23°" label="TEMP" />
-          <Metric value="3" label="EVENTS" />
-          <Metric value="78%" label="BATTERY" />
-          <Metric value="12" label="NOTIFS" />
+          <Metric value={`${battery}%`} label="BATTERY" />
+          <Metric value={`${notifCount}`} label="NOTIFS" />
         </View>
       </View>
 

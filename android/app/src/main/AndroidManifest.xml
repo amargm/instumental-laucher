@@ -6,11 +6,12 @@
     tools:ignore="QueryAllPackagesPermission"/>
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
   <uses-permission android:name="android.permission.SET_WALLPAPER"/>
-  <uses-permission android:name="android.permission.EXPAND_STATUS_BAR"/>
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
   <!-- Android 11+ package visibility -->
   <queries>
@@ -60,5 +61,16 @@
         <action android:name="android.intent.action.BOOT_COMPLETED"/>
       </intent-filter>
     </receiver>
+
+    <!-- Notification Listener Service — reads real device notifications -->
+    <service
+      android:name=".NotificationService"
+      android:label="Instrument Notifications"
+      android:exported="false"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService"/>
+      </intent-filter>
+    </service>
   </application>
 </manifest>

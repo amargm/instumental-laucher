@@ -1,82 +1,130 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
+import {
+  getNotifications,
+  dismissNotification,
+  dismissAllNotifications,
+  isNotificationAccessGranted,
+  openNotificationListenerSettings,
+  openWifiSettings,
+  openBluetoothSettings,
+  openLocationSettings,
+  openNfcSettings,
+  openCastSettings,
+  openDoNotDisturbSettings,
+  openDisplaySettings,
+  getBatteryInfo,
+  DeviceInfoEvents,
+  NotificationItem,
+} from '../native/DeviceInfo';
 
-interface Toggle {
+interface QuickAction {
   id: string;
   label: string;
   icon: string;
-  active: boolean;
+  onPress: () => void;
 }
-
-interface Notification {
-  id: string;
-  app: string;
-  time: string;
-  title: string;
-  body: string;
-}
-
-const INITIAL_TOGGLES: Toggle[] = [
-  {id: 'wifi', label: 'WIFI', icon: '◠', active: true},
-  {id: 'bt', label: 'BT', icon: '⊡', active: true},
-  {id: 'nfc', label: 'NFC', icon: '◈', active: false},
-  {id: 'gps', label: 'GPS', icon: '☉', active: false},
-  {id: 'cast', label: 'CAST', icon: '▣', active: false},
-  {id: 'dnd', label: 'DND', icon: '◉', active: true},
-  {id: 'auto', label: 'AUTO', icon: '▯', active: false},
-  {id: 'dark', label: 'DARK', icon: '◐', active: true},
-];
-
-const NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    app: 'TERMINAL',
-    time: '2m ago',
-    title: 'Build complete',
-    body: 'Project compiled successfully in 3.2s',
-  },
-  {
-    id: '2',
-    app: 'CALENDAR',
-    time: '15m ago',
-    title: 'Design Review',
-    body: 'Starting in 45 minutes',
-  },
-  {
-    id: '3',
-    app: 'MESSAGES',
-    time: '1h ago',
-    title: 'Alex',
-    body: 'Shared the updated wireframes',
-  },
-  {
-    id: '4',
-    app: 'SYSTEM',
-    time: '3h ago',
-    title: 'Update available',
-    body: 'v2.4.1 ready to install',
-  },
-];
 
 interface Props {
   navigation: any;
 }
 
 const NotificationScreen: React.FC<Props> = ({navigation}) => {
-  const [toggles, setToggles] = useState(INITIAL_TOGGLES);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [battery, setBattery] = useState(0);
 
-  const handleToggle = (id: string) => {
-    setToggles(prev =>
-      prev.map(t => (t.id === id ? {...t, active: !t.active} : t)),
+  const loadNotifications = useCallback(async () => {
+    try {
+      const granted = await isNotificationAccessGranted();
+      setHasAccess(granted);
+      if (granted) {
+        const notifs = await getNotifications();
+        // Filter out ongoing/system notifications, sort by time
+        const filtered = notifs
+          .filter(n => !n.isOngoing && n.title.length > 0)
+          .sort((a, b) => b.postTime - a.postTime);
+        setNotifications(filtered);
+      }
+    } catch (e) {
+      console.warn('Failed to load notifications:', e);
+    }
+  }, []);
+
+  const loadBattery = useCallback(async () => {
+    try {
+      const info = await getBatteryInfo();
+      setBattery(info.level);
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+    loadBattery();
+
+    // Listen for notification changes
+    const sub1 = DeviceInfoEvents.addListener('onNotificationPosted', loadNotifications);
+    const sub2 = DeviceInfoEvents.addListener('onNotificationRemoved', loadNotifications);
+
+    return () => {
+      sub1.remove();
+      sub2.remove();
+    };
+  }, [loadNotifications, loadBattery]);
+
+  const handleDismiss = async (key: string) => {
+    await dismissNotification(key);
+    setNotifications(prev => prev.filter(n => n.key !== key));
+  };
+
+  const handleDismissAll = async () => {
+    await dismissAllNotifications();
+    setNotifications([]);
+  };
+
+  const handleGrantAccess = () => {
+    Alert.alert(
+      'Notification Access',
+      'Instrument Launcher needs notification access to display your notifications. You\'ll be taken to system settings to enable it.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {text: 'Open Settings', onPress: () => openNotificationListenerSettings()},
+      ],
     );
+  };
+
+  const quickActions: QuickAction[] = [
+    {id: 'wifi', label: 'WIFI', icon: '◠', onPress: () => openWifiSettings()},
+    {id: 'bt', label: 'BT', icon: '⊡', onPress: () => openBluetoothSettings()},
+    {id: 'nfc', label: 'NFC', icon: '◈', onPress: () => openNfcSettings()},
+    {id: 'gps', label: 'GPS', icon: '☉', onPress: () => openLocationSettings()},
+    {id: 'cast', label: 'CAST', icon: '▣', onPress: () => openCastSettings()},
+    {id: 'dnd', label: 'DND', icon: '◉', onPress: () => openDoNotDisturbSettings()},
+    {id: 'display', label: 'DISP', icon: '◐', onPress: () => openDisplaySettings()},
+  ];
+
+  const getTimeAgo = (postTime: number): string => {
+    const diff = Date.now() - postTime;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
+  };
+
+  const getAppLabel = (packageName: string): string => {
+    const parts = packageName.split('.');
+    return parts[parts.length - 1].toUpperCase().slice(0, 8);
   };
 
   return (
@@ -84,61 +132,75 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>CONTROL CENTER</Text>
-        <TouchableOpacity
-          style={styles.closeWrap}
-          onPress={() => navigation.goBack()}>
-          <Text style={styles.closeBtnText}>CLOSE</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <Text style={styles.batteryText}>{battery}%</Text>
+          <TouchableOpacity
+            style={styles.closeWrap}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.closeBtnText}>CLOSE</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Quick Toggles */}
+        {/* Quick Actions — opens system settings (policy compliant) */}
+        <Text style={styles.sectionTitle}>QUICK SETTINGS</Text>
         <View style={styles.toggleGrid}>
-          {toggles.map(toggle => (
+          {quickActions.map(action => (
             <TouchableOpacity
-              key={toggle.id}
-              style={[styles.toggleBtn, toggle.active && styles.toggleBtnActive]}
+              key={action.id}
+              style={styles.toggleBtn}
               activeOpacity={0.7}
-              onPress={() => handleToggle(toggle.id)}>
-              <Text
-                style={[
-                  styles.toggleIcon,
-                  toggle.active && styles.toggleIconActive,
-                ]}>
-                {toggle.icon}
-              </Text>
-              <Text
-                style={[
-                  styles.toggleLabel,
-                  toggle.active && styles.toggleLabelActive,
-                ]}>
-                {toggle.label}
-              </Text>
+              onPress={action.onPress}>
+              <Text style={styles.toggleIcon}>{action.icon}</Text>
+              <Text style={styles.toggleLabel}>{action.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Brightness */}
-        <View style={styles.brightnessWrap}>
-          <Text style={styles.brightnessIcon}>☀</Text>
-          <View style={styles.sliderTrack}>
-            <View style={[styles.sliderFill, {width: '65%'}]} />
-          </View>
-          <Text style={styles.brightnessIcon}>☀</Text>
+        {/* Notifications */}
+        <View style={styles.notifHeaderRow}>
+          <Text style={styles.sectionTitle}>
+            NOTIFICATIONS {notifications.length > 0 ? `· ${notifications.length}` : ''}
+          </Text>
+          {notifications.length > 0 && (
+            <TouchableOpacity onPress={handleDismissAll}>
+              <Text style={styles.clearAll}>CLEAR ALL</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Notifications */}
-        <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
-        {NOTIFICATIONS.map(notif => (
-          <View key={notif.id} style={styles.notifCard}>
-            <View style={styles.notifHeader}>
-              <Text style={styles.notifApp}>{notif.app}</Text>
-              <Text style={styles.notifTime}>{notif.time}</Text>
-            </View>
-            <Text style={styles.notifTitle}>{notif.title}</Text>
-            <Text style={styles.notifBody}>{notif.body}</Text>
+        {!hasAccess ? (
+          <TouchableOpacity style={styles.accessCard} onPress={handleGrantAccess}>
+            <Text style={styles.accessTitle}>NOTIFICATION ACCESS REQUIRED</Text>
+            <Text style={styles.accessBody}>
+              Tap to grant notification access in system settings.
+              This lets Instrument display your notifications here.
+            </Text>
+            <Text style={styles.accessAction}>GRANT ACCESS →</Text>
+          </TouchableOpacity>
+        ) : notifications.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No notifications</Text>
           </View>
-        ))}
+        ) : (
+          notifications.map(notif => (
+            <TouchableOpacity
+              key={notif.key}
+              style={styles.notifCard}
+              activeOpacity={0.8}
+              onLongPress={() => handleDismiss(notif.key)}>
+              <View style={styles.notifCardHeader}>
+                <Text style={styles.notifApp}>{getAppLabel(notif.packageName)}</Text>
+                <Text style={styles.notifTime}>{getTimeAgo(notif.postTime)}</Text>
+              </View>
+              <Text style={styles.notifTitle} numberOfLines={1}>{notif.title}</Text>
+              {notif.text ? (
+                <Text style={styles.notifBody} numberOfLines={2}>{notif.text}</Text>
+              ) : null}
+            </TouchableOpacity>
+          ))
+        )}
 
         <View style={{height: 40}} />
       </ScrollView>
@@ -159,10 +221,20 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   title: {
     fontSize: 11,
     color: Colors.textMuted,
     letterSpacing: 3,
+  },
+  batteryText: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: Colors.textSecondary,
   },
   closeWrap: {
     paddingVertical: 4,
@@ -180,14 +252,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.xl,
   },
+  sectionTitle: {
+    fontSize: 9,
+    color: Colors.textMuted,
+    letterSpacing: 2,
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.sm,
+  },
   toggleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
-    marginTop: Spacing.base,
   },
   toggleBtn: {
-    width: '23%',
+    width: '22%',
     aspectRatio: 1,
     backgroundColor: Colors.surface,
     borderWidth: 1,
@@ -197,53 +275,65 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  toggleBtnActive: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
-  },
   toggleIcon: {
     fontSize: 18,
     color: Colors.textSecondary,
-  },
-  toggleIconActive: {
-    color: Colors.bg,
   },
   toggleLabel: {
     fontSize: 8,
     color: Colors.textMuted,
     letterSpacing: 1,
   },
-  toggleLabelActive: {
-    color: Colors.bg,
-  },
-  brightnessWrap: {
+  notifHeaderRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
-    marginTop: Spacing.base,
-    paddingVertical: Spacing.md,
   },
-  brightnessIcon: {
-    fontSize: 14,
-    color: Colors.textMuted,
-  },
-  sliderTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: Colors.surface2,
-    borderRadius: 2,
-  },
-  sliderFill: {
-    height: '100%',
-    backgroundColor: Colors.textSecondary,
-    borderRadius: 2,
-  },
-  sectionTitle: {
+  clearAll: {
     fontSize: 9,
     color: Colors.textMuted,
-    letterSpacing: 2,
+    letterSpacing: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sharp,
     marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
+  },
+  accessCard: {
+    padding: 16,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+    borderRadius: Radius.sharp,
+  },
+  accessTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  accessBody: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  accessAction: {
+    fontSize: 10,
+    color: Colors.accent,
+    letterSpacing: 1,
+    fontWeight: '600',
+  },
+  emptyState: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontFamily: 'monospace',
   },
   notifCard: {
     padding: 14,
@@ -253,7 +343,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sharp,
     marginBottom: Spacing.sm,
   },
-  notifHeader: {
+  notifCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
