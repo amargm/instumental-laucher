@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -6,39 +6,16 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
-  NativeModules,
-  Platform,
+  Image,
+  BackHandler,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
-
-interface AppInfo {
-  name: string;
-  packageName: string;
-  icon?: string;
-}
-
-// Mock apps for prototype — in production, use native module to get installed apps
-const MOCK_APPS: AppInfo[] = [
-  {name: 'Browser', packageName: 'com.android.chrome'},
-  {name: 'Calculator', packageName: 'com.android.calculator2'},
-  {name: 'Calendar', packageName: 'com.android.calendar'},
-  {name: 'Camera', packageName: 'com.android.camera'},
-  {name: 'Clock', packageName: 'com.android.deskclock'},
-  {name: 'Contacts', packageName: 'com.android.contacts'},
-  {name: 'Downloads', packageName: 'com.android.downloads'},
-  {name: 'Files', packageName: 'com.android.documentsui'},
-  {name: 'Gallery', packageName: 'com.android.gallery3d'},
-  {name: 'Maps', packageName: 'com.google.android.apps.maps'},
-  {name: 'Messages', packageName: 'com.android.mms'},
-  {name: 'Music', packageName: 'com.android.music'},
-  {name: 'Notes', packageName: 'com.android.notes'},
-  {name: 'Phone', packageName: 'com.android.dialer'},
-  {name: 'Photos', packageName: 'com.google.android.apps.photos'},
-  {name: 'Settings', packageName: 'com.android.settings'},
-  {name: 'Terminal', packageName: 'com.termux'},
-  {name: 'Weather', packageName: 'com.android.weather'},
-];
+import {
+  getInstalledApps,
+  launchApp,
+  AppInfo,
+} from '../native/InstalledApps';
 
 interface Props {
   navigation: any;
@@ -46,22 +23,67 @@ interface Props {
 
 const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [apps, setApps] = useState<AppInfo[]>(MOCK_APPS);
+  const [apps, setApps] = useState<AppInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadApps();
+  }, []);
+
+  // Disable back button — launcher should not go "back"
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      navigation.navigate('Home');
+      return true;
+    });
+    return () => handler.remove();
+  }, [navigation]);
+
+  const loadApps = useCallback(async () => {
+    try {
+      const installedApps = await getInstalledApps();
+      setApps(installedApps);
+    } catch (e) {
+      console.warn('Failed to load apps:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const filteredApps = apps.filter(app =>
     app.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const handleLaunch = async (packageName: string) => {
+    try {
+      await launchApp(packageName);
+    } catch (e) {
+      console.warn('Failed to launch:', packageName, e);
+    }
+  };
+
   const getInitial = (name: string) => name.charAt(0).toUpperCase();
 
   const renderApp = ({item}: {item: AppInfo}) => (
-    <TouchableOpacity style={styles.appItem} activeOpacity={0.7}>
-      <View style={styles.appIcon}>
-        <Text style={styles.appIconText}>{getInitial(item.name)}</Text>
-      </View>
+    <TouchableOpacity
+      style={styles.appItem}
+      activeOpacity={0.7}
+      onPress={() => handleLaunch(item.packageName)}>
+      {item.icon ? (
+        <Image
+          source={{uri: `data:image/png;base64,${item.icon}`}}
+          style={styles.appIconImage}
+        />
+      ) : (
+        <View style={styles.appIcon}>
+          <Text style={styles.appIconText}>{getInitial(item.name)}</Text>
+        </View>
+      )}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>{item.name}</Text>
-        <Text style={styles.appPackage}>{item.packageName}</Text>
+        <Text style={styles.appPackage} numberOfLines={1}>
+          {item.packageName}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -191,6 +213,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sharp,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  appIconImage: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sharp,
   },
   appIconText: {
     fontFamily: 'monospace',

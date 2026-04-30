@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
+  BackHandler,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
+import {launchApp, expandNotificationPanel} from '../native/InstalledApps';
 
 const {width} = Dimensions.get('window');
 
@@ -18,6 +20,12 @@ interface Props {
 
 const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [time, setTime] = useState('');
+
+  // Launcher home — disable back button
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => handler.remove();
+  }, []);
   const [date, setDate] = useState('');
 
   useEffect(() => {
@@ -81,10 +89,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
 
       {/* Favorites Dock */}
       <View style={styles.dock}>
-        <DockItem label="PHONE" icon="☎" />
-        <DockItem label="MAIL" icon="✉" />
-        <DockItem label="MEDIA" icon="▶" />
-        <DockItem label="MSG" icon="◬" />
+        <DockItem label="PHONE" icon="☎" onPress={() => launchApp('com.android.dialer').catch(() => {})} />
+        <DockItem label="MAIL" icon="✉" onPress={() => launchApp('com.google.android.gm').catch(() => {})} />
+        <DockItem label="MEDIA" icon="▶" onPress={() => launchApp('com.google.android.apps.youtube.music').catch(() => {})} />
+        <DockItem label="MSG" icon="◬" onPress={() => launchApp('com.google.android.apps.messaging').catch(() => {})} />
         <DockItem
           label="APPS"
           icon="⊞"
