@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   BackHandler,
   Animated,
+  ScrollView,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -76,6 +77,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const hideSearch = () => {
     searchInputRef.current?.blur();
     setSearchQuery('');
+    setActiveFilter(null);
     Animated.timing(searchAnim, {
       toValue: 0,
       duration: 150,
@@ -85,9 +87,36 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     });
   };
 
-  const filteredApps = apps.filter(app =>
-    app.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  const APP_CATEGORIES: {label: string; keywords: string[]}[] = [
+    {label: 'SOCIAL', keywords: ['facebook', 'instagram', 'twitter', 'snapchat', 'tiktok', 'whatsapp', 'telegram', 'signal', 'discord', 'reddit', 'linkedin', 'threads', 'mastodon']},
+    {label: 'MEDIA', keywords: ['youtube', 'music', 'spotify', 'video', 'player', 'podcast', 'camera', 'gallery', 'photos', 'netflix', 'prime']},
+    {label: 'WORK', keywords: ['mail', 'gmail', 'outlook', 'docs', 'sheets', 'drive', 'slack', 'teams', 'zoom', 'meet', 'office', 'notion', 'calendar']},
+    {label: 'GAMES', keywords: ['game', 'play', 'puzzle', 'arcade', 'racing', 'chess']},
+    {label: 'TOOLS', keywords: ['calculator', 'clock', 'weather', 'files', 'settings', 'manager', 'cleaner', 'vpn', 'browser', 'chrome', 'firefox']},
+    {label: 'SHOP', keywords: ['amazon', 'flipkart', 'shopping', 'store', 'pay', 'wallet', 'bank', 'money', 'gpay', 'phonepe', 'paytm']},
+  ];
+
+  const filteredApps = apps.filter(app => {
+    const name = app.name.toLowerCase();
+    const pkg = app.packageName.toLowerCase();
+    
+    // Text search filter
+    if (searchQuery && !name.includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    
+    // Category filter
+    if (activeFilter) {
+      const category = APP_CATEGORIES.find(c => c.label === activeFilter);
+      if (category) {
+        return category.keywords.some(kw => name.includes(kw) || pkg.includes(kw));
+      }
+    }
+    
+    return true;
+  });
 
   const handleLaunch = async (packageName: string) => {
     try {
@@ -159,6 +188,31 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
           </TouchableOpacity>
         </Animated.View>
       )}
+
+      {/* Category Filters */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterRow}
+        contentContainerStyle={styles.filterContent}>
+        <TouchableOpacity
+          style={[styles.filterChip, !activeFilter && styles.filterChipActive]}
+          activeOpacity={0.7}
+          onPress={() => setActiveFilter(null)}>
+          <Text style={[styles.filterLabel, !activeFilter && styles.filterLabelActive]}>ALL</Text>
+        </TouchableOpacity>
+        {APP_CATEGORIES.map(cat => (
+          <TouchableOpacity
+            key={cat.label}
+            style={[styles.filterChip, activeFilter === cat.label && styles.filterChipActive]}
+            activeOpacity={0.7}
+            onPress={() => setActiveFilter(activeFilter === cat.label ? null : cat.label)}>
+            <Text style={[styles.filterLabel, activeFilter === cat.label && styles.filterLabelActive]}>
+              {cat.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* App count */}
       <Text style={styles.appCount}>
@@ -274,6 +328,35 @@ const styles = StyleSheet.create({
   searchCloseText: {
     fontSize: 14,
     color: Colors.textMuted,
+  },
+  filterRow: {
+    maxHeight: 36,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.sm,
+  },
+  filterContent: {
+    gap: 6,
+    alignItems: 'center',
+  },
+  filterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sharp,
+    backgroundColor: Colors.surface,
+  },
+  filterChipActive: {
+    borderColor: Colors.textSecondary,
+    backgroundColor: Colors.surface2,
+  },
+  filterLabel: {
+    fontSize: 9,
+    color: Colors.textMuted,
+    letterSpacing: 1,
+  },
+  filterLabelActive: {
+    color: Colors.textPrimary,
   },
   appCount: {
     fontSize: 9,
