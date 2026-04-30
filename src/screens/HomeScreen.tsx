@@ -15,10 +15,6 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
 import {
-  PhoneIcon,
-  GmailIcon,
-  ChromeIcon,
-  MessagesIcon,
   GridIcon,
   SettingsIcon,
 } from '../components/AppIcons';
@@ -28,10 +24,21 @@ const STORAGE_KEYS = {
   clockFormat: '@settings_clock_format',
   quote: '@settings_quote',
   quickApps: '@settings_quick_apps',
+  dockApps: '@settings_dock_apps',
+  accentColor: '@settings_accent_color',
 };
 
+const DEFAULT_DOCK: {pkg: string; label: string}[] = [
+  {pkg: 'com.google.android.dialer', label: 'PHONE'},
+  {pkg: 'com.google.android.gm', label: 'MAIL'},
+  {pkg: 'com.android.chrome', label: 'WEB'},
+  {pkg: 'com.google.android.apps.messaging', label: 'MSG'},
+];
+
+const DEFAULT_ACCENT = '#FFFFFF';
+
 // ─── Memoized Clock Component (only re-renders on its own interval) ───
-const ClockWidget = memo(({clockFormat}: {clockFormat: '12' | '24'}) => {
+const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24'; accentColor: string}) => {
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');
   const [dayProgress, setDayProgress] = useState(0);
@@ -67,7 +74,7 @@ const ClockWidget = memo(({clockFormat}: {clockFormat: '12' | '24'}) => {
     <View style={styles.widget}>
       <Text style={styles.time}>{time}</Text>
       <View style={styles.progressWrap}>
-        <View style={[styles.progressBar, {width: `${dayProgress * 100}%`}]} />
+        <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
       </View>
       <Text style={styles.date}>{date}</Text>
     </View>
@@ -82,6 +89,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
+  const [dockApps, setDockApps] = useState<string[]>(DEFAULT_DOCK.map(d => d.pkg));
+  const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT);
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [weather, setWeather] = useState<{temp: string; condition: string} | null>(null);
   const mountedRef = useRef(true);
@@ -123,6 +132,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (q) setQuote(q);
         const apps = await AsyncStorage.getItem(STORAGE_KEYS.quickApps);
         if (apps) setQuickApps(JSON.parse(apps));
+        const dock = await AsyncStorage.getItem(STORAGE_KEYS.dockApps);
+        if (dock) setDockApps(JSON.parse(dock));
+        const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
+        if (accent) setAccentColor(accent);
       } catch (e) {}
     };
     loadSettings();
@@ -139,6 +152,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         setQuote(q || '');
         const apps = await AsyncStorage.getItem(STORAGE_KEYS.quickApps);
         if (apps) setQuickApps(JSON.parse(apps));
+        const dock = await AsyncStorage.getItem(STORAGE_KEYS.dockApps);
+        if (dock) setDockApps(JSON.parse(dock));
+        const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
+        if (accent) setAccentColor(accent);
       } catch (e) {}
     });
     return unsubscribe;
@@ -194,21 +211,6 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     }),
   ).current;
 
-  // Launch phone with multiple fallbacks
-  const launchPhone = useCallback(async () => {
-    const pkgs = ['com.google.android.dialer', 'com.android.dialer', 'com.samsung.android.dialer', 'com.android.phone'];
-    for (const pkg of pkgs) {
-      try { const r = await launchApp(pkg); if (r) return; } catch (e) {}
-    }
-  }, []);
-
-  // Launch browser (Chrome preferred)
-  const launchBrowser = useCallback(async () => {
-    const pkgs = ['com.android.chrome', 'com.google.android.googlequicksearchbox', 'org.mozilla.firefox', 'com.opera.browser'];
-    for (const pkg of pkgs) {
-      try { const r = await launchApp(pkg); if (r) return; } catch (e) {}
-    }
-  }, []);
 
   const launchQuickApp = useCallback((packageName: string) => {
     launchApp(packageName).catch(() => {});
@@ -243,7 +245,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         </TouchableOpacity>
 
         {/* Clock — isolated memo component */}
-        <ClockWidget clockFormat={clockFormat} />
+        <ClockWidget clockFormat={clockFormat} accentColor={accentColor} />
 
         {/* Weather */}
         {weather && (
@@ -283,12 +285,22 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         )}
       </Animated.View>
 
-      {/* Favorites Dock */}
+      {/* Favorites Dock — customizable */}
       <View style={styles.dock}>
-        <DockItem label="PHONE" IconComponent={PhoneIcon} onPress={launchPhone} />
-        <DockItem label="MAIL" IconComponent={GmailIcon} onPress={() => launchApp('com.google.android.gm').catch(() => {})} />
-        <DockItem label="WEB" IconComponent={ChromeIcon} onPress={launchBrowser} />
-        <DockItem label="MSG" IconComponent={MessagesIcon} onPress={() => launchApp('com.google.android.apps.messaging').catch(() => {})} />
+        {dockApps.map((pkg) => {
+          const IconComp = APP_ICON_MAP[pkg];
+          const name = getAppName(pkg);
+          const label = name.slice(0, 5).toUpperCase();
+          return (
+            <DockItem
+              key={pkg}
+              label={label}
+              IconComponent={IconComp}
+              fallbackLetter={name.charAt(0).toUpperCase()}
+              onPress={() => launchApp(pkg).catch(() => {})}
+            />
+          );
+        })}
         <DockItem
           label="APPS"
           IconComponent={GridIcon}
@@ -299,7 +311,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   );
 };
 
-const DockItem = memo(({label, IconComponent, onPress}: {label: string; IconComponent: React.FC<any>; onPress?: () => void}) => (
+const DockItem = memo(({label, IconComponent, fallbackLetter, onPress}: {label: string; IconComponent?: React.FC<any>; fallbackLetter?: string; onPress?: () => void}) => (
   <TouchableOpacity
     style={styles.dockItem}
     activeOpacity={0.6}
@@ -307,7 +319,11 @@ const DockItem = memo(({label, IconComponent, onPress}: {label: string; IconComp
     accessibilityRole="button"
     accessibilityLabel={`Open ${label}`}>
     <View style={styles.dockIcon}>
-      <IconComponent size={18} />
+      {IconComponent ? (
+        <IconComponent size={18} />
+      ) : (
+        <Text style={styles.dockLetter}>{fallbackLetter || label.charAt(0)}</Text>
+      )}
     </View>
     <Text style={styles.dockLabel}>{label}</Text>
   </TouchableOpacity>
@@ -445,6 +461,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: Colors.textMuted,
     letterSpacing: 0.5,
+  },
+  dockLetter: {
+    fontFamily: 'monospace',
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
   },
 });
 

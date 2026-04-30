@@ -24,16 +24,26 @@ const STORAGE_KEYS = {
   clockFormat: '@settings_clock_format',
   quote: '@settings_quote',
   quickApps: '@settings_quick_apps',
+  dockApps: '@settings_dock_apps',
+  accentColor: '@settings_accent_color',
 };
+
+const ACCENT_COLORS = [
+  '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96E6A1',
+  '#DDA0DD', '#FFD93D', '#FF8C42', '#6C63FF', '#00D2FF',
+];
 
 const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [gesturesEnabled, setGesturesEnabled] = useState(true);
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
+  const [dockApps, setDockApps] = useState<string[]>([]);
+  const [accentColor, setAccentColor] = useState('#FFFFFF');
   const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
   const [notifAccess, setNotifAccess] = useState(false);
   const [showAppPicker, setShowAppPicker] = useState(false);
+  const [showDockPicker, setShowDockPicker] = useState(false);
   const [allApps, setAllApps] = useState<AppInfo[]>([]);
 
   // Load persisted settings
@@ -48,6 +58,10 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         if (q !== null) setQuote(q);
         const apps = await AsyncStorage.getItem(STORAGE_KEYS.quickApps);
         if (apps) setQuickApps(JSON.parse(apps));
+        const dock = await AsyncStorage.getItem(STORAGE_KEYS.dockApps);
+        if (dock) setDockApps(JSON.parse(dock));
+        const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
+        if (accent) setAccentColor(accent);
       } catch (e) {}
     };
     loadSettings();
@@ -119,6 +133,23 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     safeSave(STORAGE_KEYS.quickApps, JSON.stringify(updated));
   };
 
+  const toggleDockApp = async (packageName: string) => {
+    let updated: string[];
+    if (dockApps.includes(packageName)) {
+      updated = dockApps.filter(p => p !== packageName);
+    } else {
+      if (dockApps.length >= 4) return; // max 4
+      updated = [...dockApps, packageName];
+    }
+    setDockApps(updated);
+    safeSave(STORAGE_KEYS.dockApps, JSON.stringify(updated));
+  };
+
+  const selectAccent = (color: string) => {
+    setAccentColor(color);
+    safeSave(STORAGE_KEYS.accentColor, color);
+  };
+
   if (showAppPicker) {
     return (
       <SafeAreaView style={styles.container}>
@@ -138,6 +169,57 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
                 style={[styles.appPickerItem, isSelected && styles.appPickerItemSelected]}
                 activeOpacity={0.7}
                 onPress={() => toggleQuickApp(item.packageName)}>
+                <View style={styles.appPickerLeft}>
+                  <View style={[styles.appPickerIcon, isSelected && styles.appPickerIconSelected]}>
+                    <Text style={styles.appPickerLetter}>
+                      {item.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.appPickerName, isSelected && styles.appPickerNameSelected]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                </View>
+                <Text style={[styles.appPickerCheck, isSelected && styles.appPickerCheckSelected]}>
+                  {isSelected ? '●' : '○'}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+          style={styles.appPickerList}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+          getItemLayout={(_, index) => ({
+            length: 56,
+            offset: 56 * index,
+            index,
+          })}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (showDockPicker) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>DOCK APPS ({dockApps.length}/4)</Text>
+          <TouchableOpacity onPress={() => setShowDockPicker(false)}>
+            <Text style={styles.closeBtn}>DONE</Text>
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={allApps}
+          keyExtractor={item => item.packageName}
+          renderItem={({item}) => {
+            const isSelected = dockApps.includes(item.packageName);
+            return (
+              <TouchableOpacity
+                style={[styles.appPickerItem, isSelected && styles.appPickerItemSelected]}
+                activeOpacity={0.7}
+                onPress={() => toggleDockApp(item.packageName)}>
                 <View style={styles.appPickerLeft}>
                   <View style={[styles.appPickerIcon, isSelected && styles.appPickerIconSelected]}>
                     <Text style={styles.appPickerLetter}>
@@ -235,6 +317,44 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
           </View>
           <Text style={styles.settingValue}>→</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.settingItem}
+          activeOpacity={0.7}
+          onPress={() => setShowDockPicker(true)}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>▣</Text>
+            <View>
+              <Text style={styles.settingName}>Dock Apps</Text>
+              <Text style={styles.settingDesc}>
+                {dockApps.length} of 4 selected · tap to edit
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.settingValue}>→</Text>
+        </TouchableOpacity>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>◆</Text>
+            <View style={{flex: 1}}>
+              <Text style={styles.settingName}>Accent Color</Text>
+              <View style={styles.colorRow}>
+                {ACCENT_COLORS.map(color => (
+                  <TouchableOpacity
+                    key={color}
+                    onPress={() => selectAccent(color)}
+                    style={[
+                      styles.colorDot,
+                      {backgroundColor: color},
+                      accentColor === color && styles.colorDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
 
         {/* Launcher Settings */}
         <Text style={styles.groupLabel}>LAUNCHER</Text>
@@ -432,6 +552,23 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: Radius.sharp,
     fontFamily: 'monospace',
+  },
+  colorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 8,
+  },
+  colorDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorDotActive: {
+    borderColor: Colors.textPrimary,
+    transform: [{scale: 1.2}],
   },
   bottomNav: {
     flexDirection: 'row',
