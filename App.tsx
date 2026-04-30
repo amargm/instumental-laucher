@@ -7,7 +7,6 @@ import {StyleSheet} from 'react-native';
 
 import HomeScreen from './src/screens/HomeScreen';
 import AppDrawerScreen from './src/screens/AppDrawerScreen';
-import SearchScreen from './src/screens/SearchScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import NotificationScreen from './src/screens/NotificationScreen';
 import {Colors} from './src/theme/tokens';
@@ -16,7 +15,6 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 export type RootStackParamList = {
   Home: undefined;
   AppDrawer: undefined;
-  Search: undefined;
   Settings: undefined;
   Notifications: undefined;
 };
@@ -58,11 +56,6 @@ const App = () => {
               name="AppDrawer"
               component={AppDrawerScreen}
               options={{animation: 'slide_from_bottom'}}
-            />
-            <Stack.Screen
-              name="Search"
-              component={SearchScreen}
-              options={{animation: 'fade_from_bottom'}}
             />
             <Stack.Screen
               name="Settings"

@@ -5,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
+  Animated,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -22,7 +22,6 @@ import {
   openCastSettings,
   openDoNotDisturbSettings,
   openDisplaySettings,
-  getBatteryInfo,
   DeviceInfoEvents,
   NotificationItem,
 } from '../native/DeviceInfo';
@@ -41,7 +40,6 @@ interface Props {
 const NotificationScreen: React.FC<Props> = ({navigation}) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
-  const [battery, setBattery] = useState(0);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -49,29 +47,17 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
       setHasAccess(granted);
       if (granted) {
         const notifs = await getNotifications();
-        // Filter out ongoing/system notifications, sort by time
         const filtered = notifs
           .filter(n => !n.isOngoing && n.title.length > 0)
           .sort((a, b) => b.postTime - a.postTime);
         setNotifications(filtered);
       }
-    } catch (e) {
-      console.warn('Failed to load notifications:', e);
-    }
-  }, []);
-
-  const loadBattery = useCallback(async () => {
-    try {
-      const info = await getBatteryInfo();
-      setBattery(info.level);
     } catch (e) {}
   }, []);
 
   useEffect(() => {
     loadNotifications();
-    loadBattery();
 
-    // Listen for notification changes
     const sub1 = DeviceInfoEvents.addListener('onNotificationPosted', loadNotifications);
     const sub2 = DeviceInfoEvents.addListener('onNotificationRemoved', loadNotifications);
 
@@ -79,7 +65,7 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
       sub1.remove();
       sub2.remove();
     };
-  }, [loadNotifications, loadBattery]);
+  }, [loadNotifications]);
 
   const handleDismiss = async (key: string) => {
     await dismissNotification(key);
@@ -92,14 +78,7 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
   };
 
   const handleGrantAccess = () => {
-    Alert.alert(
-      'Notification Access',
-      'Instrument Launcher needs notification access to display your notifications. You\'ll be taken to system settings to enable it.',
-      [
-        {text: 'Cancel', style: 'cancel'},
-        {text: 'Open Settings', onPress: () => openNotificationListenerSettings()},
-      ],
-    );
+    openNotificationListenerSettings();
   };
 
   const quickActions: QuickAction[] = [
@@ -132,25 +111,22 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>CONTROL CENTER</Text>
-        <View style={styles.headerRight}>
-          <Text style={styles.batteryText}>{battery}%</Text>
-          <TouchableOpacity
-            style={styles.closeWrap}
-            onPress={() => navigation.goBack()}>
-            <Text style={styles.closeBtnText}>CLOSE</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.closeWrap}
+          onPress={() => navigation.goBack()}>
+          <Text style={styles.closeBtnText}>CLOSE</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Quick Actions — opens system settings (policy compliant) */}
+        {/* Quick Actions */}
         <Text style={styles.sectionTitle}>QUICK SETTINGS</Text>
         <View style={styles.toggleGrid}>
           {quickActions.map(action => (
             <TouchableOpacity
               key={action.id}
               style={styles.toggleBtn}
-              activeOpacity={0.7}
+              activeOpacity={0.6}
               onPress={action.onPress}>
               <Text style={styles.toggleIcon}>{action.icon}</Text>
               <Text style={styles.toggleLabel}>{action.label}</Text>
@@ -175,7 +151,6 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.accessTitle}>NOTIFICATION ACCESS REQUIRED</Text>
             <Text style={styles.accessBody}>
               Tap to grant notification access in system settings.
-              This lets Instrument display your notifications here.
             </Text>
             <Text style={styles.accessAction}>GRANT ACCESS →</Text>
           </TouchableOpacity>
@@ -221,20 +196,10 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   title: {
     fontSize: 11,
     color: Colors.textMuted,
     letterSpacing: 3,
-  },
-  batteryText: {
-    fontFamily: 'monospace',
-    fontSize: 11,
-    color: Colors.textSecondary,
   },
   closeWrap: {
     paddingVertical: 4,
@@ -257,26 +222,26 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: 2,
     marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   toggleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.sm,
+    gap: 8,
   },
   toggleBtn: {
-    width: '22%',
-    aspectRatio: 1,
+    width: 64,
+    height: 56,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.sharp,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
   },
   toggleIcon: {
-    fontSize: 18,
+    fontSize: 16,
     color: Colors.textSecondary,
   },
   toggleLabel: {
@@ -288,46 +253,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.md,
   },
   clearAll: {
     fontSize: 9,
     color: Colors.textMuted,
     letterSpacing: 1,
-    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
     paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.sharp,
+  },
+  accessCard: {
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.sharp,
-    marginTop: Spacing.xl,
-  },
-  accessCard: {
-    padding: 16,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.accent,
-    borderRadius: Radius.sharp,
+    padding: Spacing.base,
   },
   accessTitle: {
     fontSize: 11,
-    fontWeight: '600',
     color: Colors.textPrimary,
     letterSpacing: 1,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   accessBody: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-    marginBottom: 12,
+    fontSize: 11,
+    color: Colors.textMuted,
+    lineHeight: 16,
   },
   accessAction: {
     fontSize: 10,
-    color: Colors.accent,
+    color: Colors.textSecondary,
     letterSpacing: 1,
-    fontWeight: '600',
+    marginTop: Spacing.sm,
   },
   emptyState: {
-    padding: 24,
+    paddingVertical: 30,
     alignItems: 'center',
   },
   emptyText: {
@@ -336,39 +300,39 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   notifCard: {
-    padding: 14,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.sharp,
+    padding: Spacing.md,
     marginBottom: Spacing.sm,
   },
   notifCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   notifApp: {
-    fontSize: 10,
+    fontSize: 9,
     color: Colors.textMuted,
     letterSpacing: 1,
   },
   notifTime: {
-    fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 9,
     color: Colors.textMuted,
+    fontFamily: 'monospace',
   },
   notifTitle: {
     fontSize: 13,
-    fontWeight: '500',
     color: Colors.textPrimary,
-    marginBottom: 2,
+    fontWeight: '500',
   },
   notifBody: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.textSecondary,
-    lineHeight: 18,
+    marginTop: 2,
+    lineHeight: 16,
   },
 });
 

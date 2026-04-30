@@ -148,7 +148,6 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       <View style={styles.bottomNav}>
         <NavItem label="HOME" active={false} onPress={() => navigation.navigate('Home')} />
         <NavItem label="APPS" active={true} />
-        <NavItem label="SEARCH" active={false} onPress={() => navigation.navigate('Search')} />
         <NavItem label="CONFIG" active={false} onPress={() => navigation.navigate('Settings')} />
       </View>
     </SafeAreaView>
