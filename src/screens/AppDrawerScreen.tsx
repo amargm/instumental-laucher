@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   BackHandler,
+  Animated,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -17,14 +18,20 @@ import {
 } from '../native/InstalledApps';
 import {APP_ICON_MAP} from '../components/AppIcons';
 
+// Module-level cache so apps persist between navigations
+let cachedApps: AppInfo[] = [];
+
 interface Props {
   navigation: any;
 }
 
 const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [apps, setApps] = useState<AppInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [apps, setApps] = useState<AppInfo[]>(cachedApps);
+  const [loading, setLoading] = useState(cachedApps.length === 0);
+  const searchInputRef = useRef<TextInput>(null);
+  const searchAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadApps();
@@ -33,15 +40,20 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   // Disable back button — launcher should not go "back"
   useEffect(() => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (searchVisible) {
+        hideSearch();
+        return true;
+      }
       navigation.navigate('Home');
       return true;
     });
     return () => handler.remove();
-  }, [navigation]);
+  }, [navigation, searchVisible]);
 
   const loadApps = useCallback(async () => {
     try {
       const installedApps = await getInstalledApps();
+      cachedApps = installedApps;
       setApps(installedApps);
     } catch (e) {
       console.warn('Failed to load apps:', e);
@@ -49,6 +61,29 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       setLoading(false);
     }
   }, []);
+
+  const showSearch = () => {
+    setSearchVisible(true);
+    Animated.timing(searchAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: false,
+    }).start(() => {
+      searchInputRef.current?.focus();
+    });
+  };
+
+  const hideSearch = () => {
+    searchInputRef.current?.blur();
+    setSearchQuery('');
+    Animated.timing(searchAnim, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: false,
+    }).start(() => {
+      setSearchVisible(false);
+    });
+  };
 
   const filteredApps = apps.filter(app =>
     app.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -93,23 +128,37 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>APPLICATIONS</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.closeBtn}>✕</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {!searchVisible && (
+            <TouchableOpacity onPress={showSearch} style={styles.searchToggle}>
+              <Text style={styles.searchToggleText}>⌕</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.closeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchWrap}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="/ search apps..."
-          placeholderTextColor={Colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
+      {/* Search — shown only when toggled */}
+      {searchVisible && (
+        <Animated.View style={[styles.searchWrap, {opacity: searchAnim}]}>
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="/ search apps..."
+            placeholderTextColor={Colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          <TouchableOpacity onPress={hideSearch} style={styles.searchClose}>
+            <Text style={styles.searchCloseText}>✕</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* App count */}
       <Text style={styles.appCount}>
@@ -177,10 +226,22 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   title: {
     fontSize: 11,
     color: Colors.textMuted,
     letterSpacing: 3,
+  },
+  searchToggle: {
+    padding: Spacing.sm,
+  },
+  searchToggleText: {
+    fontSize: 18,
+    color: Colors.textMuted,
   },
   closeBtn: {
     fontSize: 16,
@@ -188,10 +249,14 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
   },
   searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.md,
+    gap: 8,
   },
   searchInput: {
+    flex: 1,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -202,6 +267,13 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 13,
     letterSpacing: 0.5,
+  },
+  searchClose: {
+    padding: 6,
+  },
+  searchCloseText: {
+    fontSize: 14,
+    color: Colors.textMuted,
   },
   appCount: {
     fontSize: 9,
