@@ -83,26 +83,30 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     loadApps();
   }, []);
 
+  const safeSave = async (key: string, value: string) => {
+    try { await AsyncStorage.setItem(key, value); } catch (e) {}
+  };
+
   const toggleGestures = async (value: boolean) => {
     setGesturesEnabled(value);
-    await AsyncStorage.setItem(STORAGE_KEYS.gesturesEnabled, String(value));
+    safeSave(STORAGE_KEYS.gesturesEnabled, String(value));
   };
 
   const togglePackageNames = async (value: boolean) => {
     setShowPackageNames(value);
-    await AsyncStorage.setItem(STORAGE_KEYS.showPackageNames, String(value));
+    safeSave(STORAGE_KEYS.showPackageNames, String(value));
   };
 
   const toggleClockFormat = async () => {
     const newFmt = clockFormat === '24' ? '12' : '24';
     setClockFormat(newFmt);
-    await AsyncStorage.setItem(STORAGE_KEYS.clockFormat, newFmt);
+    safeSave(STORAGE_KEYS.clockFormat, newFmt);
   };
 
   const saveQuote = async (text: string) => {
     const trimmed = text.slice(0, 50);
     setQuote(trimmed);
-    await AsyncStorage.setItem(STORAGE_KEYS.quote, trimmed);
+    safeSave(STORAGE_KEYS.quote, trimmed);
   };
 
   const toggleQuickApp = async (packageName: string) => {
@@ -114,7 +118,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
       updated = [...quickApps, packageName];
     }
     setQuickApps(updated);
-    await AsyncStorage.setItem(STORAGE_KEYS.quickApps, JSON.stringify(updated));
+    safeSave(STORAGE_KEYS.quickApps, JSON.stringify(updated));
   };
 
   if (showAppPicker) {

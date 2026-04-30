@@ -1,6 +1,9 @@
 import React from 'react';
 import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Colors, Spacing, Radius} from '../theme/tokens';
+
+const CRASH_LOG_KEY = '@crash_log';
 
 interface Props {
   children: React.ReactNode;
@@ -20,6 +23,21 @@ class ErrorBoundary extends React.Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     return {hasError: true, error};
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    const entry = {
+      message: error.message,
+      stack: error.stack?.slice(0, 500),
+      componentStack: info.componentStack?.slice(0, 300),
+      timestamp: new Date().toISOString(),
+    };
+    AsyncStorage.getItem(CRASH_LOG_KEY).then(existing => {
+      const logs = existing ? JSON.parse(existing) : [];
+      logs.unshift(entry);
+      // Keep last 10 crashes
+      AsyncStorage.setItem(CRASH_LOG_KEY, JSON.stringify(logs.slice(0, 10))).catch(() => {});
+    }).catch(() => {});
   }
 
   handleReset = () => {

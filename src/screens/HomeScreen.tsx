@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
-import {getNotificationCount} from '../native/DeviceInfo';
+import {getNotificationCount, DeviceInfoEvents} from '../native/DeviceInfo';
 import {
   PhoneIcon,
   GmailIcon,
@@ -178,7 +178,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     };
   }, []);
 
-  // Fetch notifications (uses events when available, polls as fallback)
+  // Notification count — event-driven with initial fetch
   useEffect(() => {
     const fetchNotifs = async () => {
       try {
@@ -187,8 +187,15 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       } catch (e) {}
     };
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 15000);
-    return () => clearInterval(interval);
+    const postSub = DeviceInfoEvents.addListener('onNotificationPosted', fetchNotifs);
+    const removeSub = DeviceInfoEvents.addListener('onNotificationRemoved', fetchNotifs);
+    // Fallback poll every 60s in case events are missed
+    const interval = setInterval(fetchNotifs, 60000);
+    return () => {
+      postSub.remove();
+      removeSub.remove();
+      clearInterval(interval);
+    };
   }, []);
 
   // Swipe gestures
