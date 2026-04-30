@@ -21,7 +21,6 @@ interface Props {
 
 const STORAGE_KEYS = {
   gesturesEnabled: '@settings_gestures',
-  showPackageNames: '@settings_package_names',
   clockFormat: '@settings_clock_format',
   quote: '@settings_quote',
   quickApps: '@settings_quick_apps',
@@ -29,7 +28,6 @@ const STORAGE_KEYS = {
 
 const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [gesturesEnabled, setGesturesEnabled] = useState(true);
-  const [showPackageNames, setShowPackageNames] = useState(true);
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
@@ -44,8 +42,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
       try {
         const g = await AsyncStorage.getItem(STORAGE_KEYS.gesturesEnabled);
         if (g !== null) setGesturesEnabled(g === 'true');
-        const p = await AsyncStorage.getItem(STORAGE_KEYS.showPackageNames);
-        if (p !== null) setShowPackageNames(p === 'true');
         const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
         const q = await AsyncStorage.getItem(STORAGE_KEYS.quote);
@@ -77,7 +73,14 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     const loadApps = async () => {
       try {
         const apps = await getInstalledApps();
-        setAllApps(apps);
+        // Deduplicate
+        const seen = new Set<string>();
+        const unique = apps.filter(app => {
+          if (seen.has(app.packageName)) return false;
+          seen.add(app.packageName);
+          return true;
+        });
+        setAllApps(unique);
       } catch (e) {}
     };
     loadApps();
@@ -92,11 +95,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     safeSave(STORAGE_KEYS.gesturesEnabled, String(value));
   };
 
-  const togglePackageNames = async (value: boolean) => {
-    setShowPackageNames(value);
-    safeSave(STORAGE_KEYS.showPackageNames, String(value));
-  };
-
   const toggleClockFormat = async () => {
     const newFmt = clockFormat === '24' ? '12' : '24';
     setClockFormat(newFmt);
@@ -104,7 +102,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   };
 
   const saveQuote = async (text: string) => {
-    const trimmed = text.slice(0, 50);
+    const trimmed = text.slice(0, 100);
     setQuote(trimmed);
     safeSave(STORAGE_KEYS.quote, trimmed);
   };
@@ -133,28 +131,40 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         <FlatList
           data={allApps}
           keyExtractor={item => item.packageName}
-          renderItem={({item}) => (
-            <TouchableOpacity
-              style={styles.appPickerItem}
-              activeOpacity={0.7}
-              onPress={() => toggleQuickApp(item.packageName)}>
-              <View style={styles.appPickerLeft}>
-                <View style={styles.appPickerIcon}>
-                  <Text style={styles.appPickerLetter}>
-                    {item.name.charAt(0).toUpperCase()}
+          renderItem={({item}) => {
+            const isSelected = quickApps.includes(item.packageName);
+            return (
+              <TouchableOpacity
+                style={[styles.appPickerItem, isSelected && styles.appPickerItemSelected]}
+                activeOpacity={0.7}
+                onPress={() => toggleQuickApp(item.packageName)}>
+                <View style={styles.appPickerLeft}>
+                  <View style={[styles.appPickerIcon, isSelected && styles.appPickerIconSelected]}>
+                    <Text style={styles.appPickerLetter}>
+                      {item.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.appPickerName, isSelected && styles.appPickerNameSelected]} numberOfLines={1}>
+                    {item.name}
                   </Text>
                 </View>
-                <Text style={styles.appPickerName} numberOfLines={1}>
-                  {item.name}
+                <Text style={[styles.appPickerCheck, isSelected && styles.appPickerCheckSelected]}>
+                  {isSelected ? '●' : '○'}
                 </Text>
-              </View>
-              <Text style={styles.appPickerCheck}>
-                {quickApps.includes(item.packageName) ? '●' : '○'}
-              </Text>
-            </TouchableOpacity>
-          )}
+              </TouchableOpacity>
+            );
+          }}
           style={styles.appPickerList}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+          getItemLayout={(_, index) => ({
+            length: 56,
+            offset: 56 * index,
+            index,
+          })}
         />
       </SafeAreaView>
     );
@@ -189,17 +199,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
           <Text style={styles.settingValue}>{clockFormat}H</Text>
         </TouchableOpacity>
 
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>◐</Text>
-            <View>
-              <Text style={styles.settingName}>Theme</Text>
-              <Text style={styles.settingDesc}>Always dark</Text>
-            </View>
-          </View>
-          <Text style={styles.settingValue}>DARK</Text>
-        </View>
-
         {/* Home Screen */}
         <Text style={styles.groupLabel}>HOME SCREEN</Text>
 
@@ -212,9 +211,9 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
                 style={styles.quoteInput}
                 value={quote}
                 onChangeText={saveQuote}
-                placeholder="Type your quote (max 50 chars)"
+                placeholder="Type your quote (max 100 chars)"
                 placeholderTextColor={Colors.textMuted}
-                maxLength={50}
+                maxLength={100}
                 returnKeyType="done"
               />
             </View>
@@ -253,22 +252,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             onValueChange={toggleGestures}
             trackColor={{false: Colors.surface2, true: Colors.accent}}
             thumbColor={gesturesEnabled ? Colors.bg : Colors.textMuted}
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>◈</Text>
-            <View>
-              <Text style={styles.settingName}>Show Package Names</Text>
-              <Text style={styles.settingDesc}>Display package IDs in app drawer</Text>
-            </View>
-          </View>
-          <Switch
-            value={showPackageNames}
-            onValueChange={togglePackageNames}
-            trackColor={{false: Colors.surface2, true: Colors.accent}}
-            thumbColor={showPackageNames ? Colors.bg : Colors.textMuted}
           />
         </View>
 
@@ -480,8 +463,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
+    height: 56,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  appPickerItemSelected: {
+    backgroundColor: Colors.surface,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.textPrimary,
+    paddingLeft: 10,
   },
   appPickerLeft: {
     flexDirection: 'row',
@@ -497,6 +487,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  appPickerIconSelected: {
+    backgroundColor: Colors.accent,
+  },
   appPickerLetter: {
     fontFamily: 'monospace',
     fontSize: 14,
@@ -507,9 +500,15 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     flex: 1,
   },
+  appPickerNameSelected: {
+    fontWeight: '600',
+  },
   appPickerCheck: {
     fontSize: 16,
     color: Colors.textSecondary,
+  },
+  appPickerCheckSelected: {
+    color: Colors.textPrimary,
   },
 });
 

@@ -14,14 +14,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
-import {getNotificationCount, DeviceInfoEvents} from '../native/DeviceInfo';
 import {
   PhoneIcon,
   GmailIcon,
   ChromeIcon,
   MessagesIcon,
   GridIcon,
-  BellIcon,
   SettingsIcon,
 } from '../components/AppIcons';
 import {APP_ICON_MAP} from '../components/AppIcons';
@@ -81,7 +79,6 @@ interface Props {
 }
 
 const HomeScreen: React.FC<Props> = ({navigation}) => {
-  const [notifCount, setNotifCount] = useState(0);
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
@@ -175,26 +172,6 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return () => {
       controller.abort();
       clearInterval(weatherInterval);
-    };
-  }, []);
-
-  // Notification count — event-driven with initial fetch
-  useEffect(() => {
-    const fetchNotifs = async () => {
-      try {
-        const n = await getNotificationCount();
-        if (mountedRef.current) setNotifCount(n);
-      } catch (e) {}
-    };
-    fetchNotifs();
-    const postSub = DeviceInfoEvents.addListener('onNotificationPosted', fetchNotifs);
-    const removeSub = DeviceInfoEvents.addListener('onNotificationRemoved', fetchNotifs);
-    // Fallback poll every 60s in case events are missed
-    const interval = setInterval(fetchNotifs, 60000);
-    return () => {
-      postSub.remove();
-      removeSub.remove();
-      clearInterval(interval);
     };
   }, []);
 
@@ -298,19 +275,6 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.quickBtn}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="View notifications"
-            onPress={() => navigateTo('Notifications')}>
-            <View style={styles.quickBtnInner}>
-              <BellIcon size={13} color={Colors.textSecondary} />
-              <Text style={styles.quickBtnText}>
-                {notifCount > 0 ? `${notifCount}` : 'Alerts'}
-              </Text>
-            </View>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.quickBtn}
             activeOpacity={0.7}

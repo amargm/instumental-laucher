@@ -56,7 +56,7 @@ const App = () => {
             screenOptions={{
               headerShown: false,
               animation: 'fade_from_bottom',
-              animationDuration: 200,
+              animationDuration: 150,
               contentStyle: {backgroundColor: Colors.bg},
               gestureEnabled: true,
             }}>
@@ -68,7 +68,7 @@ const App = () => {
             <Stack.Screen
               name="AppDrawer"
               component={AppDrawerWithBoundary}
-              options={{animation: 'slide_from_bottom'}}
+              options={{animation: 'fade', animationDuration: 120}}
             />
             <Stack.Screen
               name="Settings"

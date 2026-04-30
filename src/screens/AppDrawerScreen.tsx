@@ -7,7 +7,6 @@ import {
   FlatList,
   TouchableOpacity,
   BackHandler,
-  Animated,
   ScrollView,
   Image,
 } from 'react-native';
@@ -35,7 +34,6 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const [apps, setApps] = useState<AppInfo[]>(cachedApps);
   const [loading, setLoading] = useState(cachedApps.length === 0);
   const searchInputRef = useRef<TextInput>(null);
-  const searchAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadApps();
@@ -63,8 +61,15 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const loadApps = useCallback(async () => {
     try {
       const installedApps = await getInstalledApps();
-      cachedApps = installedApps;
-      setApps(installedApps);
+      // Deduplicate by packageName (keep first occurrence)
+      const seen = new Set<string>();
+      const unique = installedApps.filter(app => {
+        if (seen.has(app.packageName)) return false;
+        seen.add(app.packageName);
+        return true;
+      });
+      cachedApps = unique;
+      setApps(unique);
     } catch (e) {
       console.warn('Failed to load apps:', e);
     } finally {
@@ -74,26 +79,14 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   const showSearch = () => {
     setSearchVisible(true);
-    Animated.timing(searchAnim, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: false,
-    }).start(() => {
-      searchInputRef.current?.focus();
-    });
+    setTimeout(() => searchInputRef.current?.focus(), 100);
   };
 
   const hideSearch = () => {
     searchInputRef.current?.blur();
     setSearchQuery('');
     setActiveFilter(null);
-    Animated.timing(searchAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: false,
-    }).start(() => {
-      setSearchVisible(false);
-    });
+    setSearchVisible(false);
   };
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
@@ -141,39 +134,33 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>APPLICATIONS</Text>
-        <View style={styles.headerRight}>
-          {!searchVisible && (
-            <TouchableOpacity onPress={showSearch} style={styles.searchToggle}>
-              <Text style={styles.searchToggleText}>⌕</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.closeBtn}>✕</Text>
+      {/* Header — switches between title mode and search mode */}
+      {!searchVisible ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>APPLICATIONS</Text>
+          <TouchableOpacity onPress={showSearch} style={styles.searchToggle}>
+            <Text style={styles.searchToggleText}>⌕</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* Search — shown only when toggled */}
-      {searchVisible && (
-        <Animated.View style={[styles.searchWrap, {opacity: searchAnim}]}>
-          <TextInput
-            ref={searchInputRef}
-            style={styles.searchInput}
-            placeholder="/ search apps..."
-            placeholderTextColor={Colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-          />
-          <TouchableOpacity onPress={hideSearch} style={styles.searchClose}>
-            <Text style={styles.searchCloseText}>✕</Text>
-          </TouchableOpacity>
-        </Animated.View>
+      ) : (
+        <View style={styles.header}>
+          <View style={styles.searchWrap}>
+            <TextInput
+              ref={searchInputRef}
+              style={styles.searchInput}
+              placeholder="/ search apps..."
+              placeholderTextColor={Colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            <TouchableOpacity onPress={hideSearch} style={styles.searchClose}>
+              <Text style={styles.searchCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* Category Filters */}
@@ -281,9 +268,6 @@ const AppItem = memo(({item, onPress}: {item: AppInfo; onPress: (pkg: string) =>
       </View>
       <View style={styles.appInfo}>
         <Text style={styles.appName}>{item.name}</Text>
-        <Text style={styles.appPackage} numberOfLines={1}>
-          {item.packageName}
-        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -312,11 +296,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   title: {
     fontSize: 11,
     color: Colors.textMuted,
@@ -324,30 +303,24 @@ const styles = StyleSheet.create({
   },
   searchToggle: {
     padding: Spacing.sm,
+    paddingHorizontal: Spacing.base,
   },
   searchToggleText: {
     fontSize: 18,
     color: Colors.textMuted,
   },
-  closeBtn: {
-    fontSize: 16,
-    color: Colors.textMuted,
-    padding: Spacing.sm,
-  },
   searchWrap: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.md,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.sharp,
     paddingHorizontal: Spacing.base,
+  },
+  searchInput: {
+    flex: 1,
     paddingVertical: Spacing.md,
     color: Colors.textPrimary,
     fontFamily: 'monospace',
@@ -362,13 +335,16 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   filterRow: {
-    maxHeight: 36,
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 40,
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.sm,
   },
   filterContent: {
     gap: 6,
     alignItems: 'center',
+    paddingRight: Spacing.xl,
   },
   filterChip: {
     paddingHorizontal: 10,
@@ -437,13 +413,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: Colors.textPrimary,
-    letterSpacing: 0.3,
-  },
-  appPackage: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 2,
-    fontFamily: 'monospace',
     letterSpacing: 0.3,
   },
   bottomNav: {
