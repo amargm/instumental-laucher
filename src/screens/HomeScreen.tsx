@@ -233,6 +233,15 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
       <Animated.View style={[styles.content, {opacity: fadeAnim, transform: [{translateY: slideAnim}]}]}>
+        {/* Settings — subtle top-right icon */}
+        <TouchableOpacity
+          style={styles.settingsBtn}
+          activeOpacity={0.6}
+          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+          onPress={() => navigateTo('Settings')}>
+          <SettingsIcon size={14} color={Colors.textMuted} />
+        </TouchableOpacity>
+
         {/* Clock — isolated memo component */}
         <ClockWidget clockFormat={clockFormat} />
 
@@ -272,21 +281,6 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             </ScrollView>
           </View>
         )}
-
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.quickBtn}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-            onPress={() => navigateTo('Settings')}>
-            <View style={styles.quickBtnInner}>
-              <SettingsIcon size={13} color={Colors.textSecondary} />
-              <Text style={styles.quickBtnText}>Config</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
       </Animated.View>
 
       {/* Favorites Dock */}
@@ -411,30 +405,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     textAlign: 'center',
   },
-  quickActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.xl,
-  },
-  quickBtn: {
-    flex: 1,
-    height: 44,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.sharp,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickBtnInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  quickBtnText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    letterSpacing: 0.5,
+  settingsBtn: {
+    position: 'absolute',
+    top: Spacing.lg,
+    right: 0,
+    padding: Spacing.sm,
+    zIndex: 1,
   },
   dock: {
     position: 'absolute',
