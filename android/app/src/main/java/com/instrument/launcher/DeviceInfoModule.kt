@@ -222,4 +222,15 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
             promise.reject("ERROR", e.message)
         }
     }
+
+    // Required for NativeEventEmitter on Android
+    @ReactMethod
+    fun addListener(eventName: String) {
+        // No-op: Required for RN NativeEventEmitter
+    }
+
+    @ReactMethod
+    fun removeListeners(count: Int) {
+        // No-op: Required for RN NativeEventEmitter
+    }
 }
