@@ -6,7 +6,6 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
-  Image,
   BackHandler,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -16,6 +15,7 @@ import {
   launchApp,
   AppInfo,
 } from '../native/InstalledApps';
+import {APP_ICON_MAP} from '../components/AppIcons';
 
 interface Props {
   navigation: any;
@@ -64,29 +64,29 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   const getInitial = (name: string) => name.charAt(0).toUpperCase();
 
-  const renderApp = ({item}: {item: AppInfo}) => (
-    <TouchableOpacity
-      style={styles.appItem}
-      activeOpacity={0.7}
-      onPress={() => handleLaunch(item.packageName)}>
-      {item.icon ? (
-        <Image
-          source={{uri: `data:image/png;base64,${item.icon}`}}
-          style={styles.appIconImage}
-        />
-      ) : (
+  const renderApp = ({item}: {item: AppInfo}) => {
+    const CustomIcon = APP_ICON_MAP[item.packageName];
+    return (
+      <TouchableOpacity
+        style={styles.appItem}
+        activeOpacity={0.7}
+        onPress={() => handleLaunch(item.packageName)}>
         <View style={styles.appIcon}>
-          <Text style={styles.appIconText}>{getInitial(item.name)}</Text>
+          {CustomIcon ? (
+            <CustomIcon size={18} />
+          ) : (
+            <Text style={styles.appIconText}>{getInitial(item.name)}</Text>
+          )}
         </View>
-      )}
-      <View style={styles.appInfo}>
-        <Text style={styles.appName}>{item.name}</Text>
-        <Text style={styles.appPackage} numberOfLines={1}>
-          {item.packageName}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.appInfo}>
+          <Text style={styles.appName}>{item.name}</Text>
+          <Text style={styles.appPackage} numberOfLines={1}>
+            {item.packageName}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -213,11 +213,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sharp,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  appIconImage: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sharp,
   },
   appIconText: {
     fontFamily: 'monospace',

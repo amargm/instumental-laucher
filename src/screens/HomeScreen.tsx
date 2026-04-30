@@ -11,6 +11,16 @@ import {
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, expandNotificationPanel} from '../native/InstalledApps';
+import {
+  PhoneIcon,
+  GmailIcon,
+  YouTubeIcon,
+  MessagesIcon,
+  GridIcon,
+  SearchIcon,
+  BellIcon,
+  SettingsIcon,
+} from '../components/AppIcons';
 
 const {width} = Dimensions.get('window');
 
@@ -71,31 +81,40 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           style={styles.quickBtn}
           activeOpacity={0.7}
           onPress={() => navigation.navigate('Search')}>
-          <Text style={styles.quickBtnText}>⌕ Search</Text>
+          <View style={styles.quickBtnInner}>
+            <SearchIcon size={13} color={Colors.textSecondary} />
+            <Text style={styles.quickBtnText}>Search</Text>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.quickBtn}
           activeOpacity={0.7}
           onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.quickBtnText}>◉ Alerts</Text>
+          <View style={styles.quickBtnInner}>
+            <BellIcon size={13} color={Colors.textSecondary} />
+            <Text style={styles.quickBtnText}>Alerts</Text>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.quickBtn}
           activeOpacity={0.7}
           onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.quickBtnText}>⚙ Config</Text>
+          <View style={styles.quickBtnInner}>
+            <SettingsIcon size={13} color={Colors.textSecondary} />
+            <Text style={styles.quickBtnText}>Config</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
       {/* Favorites Dock */}
       <View style={styles.dock}>
-        <DockItem label="PHONE" icon="☎" onPress={() => launchApp('com.android.dialer').catch(() => {})} />
-        <DockItem label="MAIL" icon="✉" onPress={() => launchApp('com.google.android.gm').catch(() => {})} />
-        <DockItem label="MEDIA" icon="▶" onPress={() => launchApp('com.google.android.apps.youtube.music').catch(() => {})} />
-        <DockItem label="MSG" icon="◬" onPress={() => launchApp('com.google.android.apps.messaging').catch(() => {})} />
+        <DockItem label="PHONE" IconComponent={PhoneIcon} onPress={() => launchApp('com.android.dialer').catch(() => {})} />
+        <DockItem label="MAIL" IconComponent={GmailIcon} onPress={() => launchApp('com.google.android.gm').catch(() => {})} />
+        <DockItem label="MEDIA" IconComponent={YouTubeIcon} onPress={() => launchApp('com.google.android.apps.youtube.music').catch(() => {})} />
+        <DockItem label="MSG" IconComponent={MessagesIcon} onPress={() => launchApp('com.google.android.apps.messaging').catch(() => {})} />
         <DockItem
           label="APPS"
-          icon="⊞"
+          IconComponent={GridIcon}
           onPress={() => navigation.navigate('AppDrawer')}
         />
       </View>
@@ -110,14 +129,14 @@ const Metric: React.FC<{value: string; label: string}> = ({value, label}) => (
   </View>
 );
 
-const DockItem: React.FC<{label: string; icon: string; onPress?: () => void}> = ({
+const DockItem: React.FC<{label: string; IconComponent: React.FC<any>; onPress?: () => void}> = ({
   label,
-  icon,
+  IconComponent,
   onPress,
 }) => (
   <TouchableOpacity style={styles.dockItem} activeOpacity={0.7} onPress={onPress}>
     <View style={styles.dockIcon}>
-      <Text style={styles.dockIconText}>{icon}</Text>
+      <IconComponent size={18} />
     </View>
     <Text style={styles.dockLabel}>{label}</Text>
   </TouchableOpacity>
@@ -184,6 +203,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  quickBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   quickBtnText: {
     fontSize: 11,
     color: Colors.textSecondary,
@@ -217,10 +241,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sharp,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  dockIconText: {
-    fontSize: 18,
-    color: Colors.textPrimary,
   },
   dockLabel: {
     fontSize: 9,
