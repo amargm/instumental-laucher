@@ -21,9 +21,22 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Per-screen error boundary wrappers
+const HomeWithBoundary = (props: any) => (
+  <ErrorBoundary><HomeScreen {...props} /></ErrorBoundary>
+);
+const AppDrawerWithBoundary = (props: any) => (
+  <ErrorBoundary><AppDrawerScreen {...props} /></ErrorBoundary>
+);
+const SettingsWithBoundary = (props: any) => (
+  <ErrorBoundary><SettingsScreen {...props} /></ErrorBoundary>
+);
+const NotificationsWithBoundary = (props: any) => (
+  <ErrorBoundary><NotificationScreen {...props} /></ErrorBoundary>
+);
+
 const App = () => {
   return (
-    <ErrorBoundary>
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <NavigationContainer
@@ -49,29 +62,28 @@ const App = () => {
             }}>
             <Stack.Screen
               name="Home"
-              component={HomeScreen}
+              component={HomeWithBoundary}
               options={{animation: 'none'}}
             />
             <Stack.Screen
               name="AppDrawer"
-              component={AppDrawerScreen}
+              component={AppDrawerWithBoundary}
               options={{animation: 'slide_from_bottom'}}
             />
             <Stack.Screen
               name="Settings"
-              component={SettingsScreen}
+              component={SettingsWithBoundary}
               options={{animation: 'slide_from_right'}}
             />
             <Stack.Screen
               name="Notifications"
-              component={NotificationScreen}
+              component={NotificationsWithBoundary}
               options={{animation: 'slide_from_bottom'}}
             />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>
-    </ErrorBoundary>
   );
 };
 

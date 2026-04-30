@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useCallback, useRef, memo} from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,16 @@ import {
   BackHandler,
   Animated,
   ScrollView,
+  Image,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {
   getInstalledApps,
+  getAppIcon,
   launchApp,
   AppInfo,
+  InstalledAppsEvents,
 } from '../native/InstalledApps';
 import {APP_ICON_MAP} from '../components/AppIcons';
 
@@ -36,6 +39,12 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   useEffect(() => {
     loadApps();
+    // Listen for app install/uninstall
+    const sub = InstalledAppsEvents.addListener('onAppsChanged', () => {
+      cachedApps = [];
+      loadApps();
+    });
+    return () => sub.remove();
   }, []);
 
   // Disable back button — launcher should not go "back"
@@ -118,39 +127,17 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     return true;
   });
 
-  const handleLaunch = async (packageName: string) => {
+  const handleLaunch = useCallback(async (packageName: string) => {
     try {
       await launchApp(packageName);
     } catch (e) {
       console.warn('Failed to launch:', packageName, e);
     }
-  };
+  }, []);
 
-  const getInitial = (name: string) => name.charAt(0).toUpperCase();
-
-  const renderApp = ({item}: {item: AppInfo}) => {
-    const CustomIcon = APP_ICON_MAP[item.packageName];
-    return (
-      <TouchableOpacity
-        style={styles.appItem}
-        activeOpacity={0.7}
-        onPress={() => handleLaunch(item.packageName)}>
-        <View style={styles.appIcon}>
-          {CustomIcon ? (
-            <CustomIcon size={18} />
-          ) : (
-            <Text style={styles.appIconText}>{getInitial(item.name)}</Text>
-          )}
-        </View>
-        <View style={styles.appInfo}>
-          <Text style={styles.appName}>{item.name}</Text>
-          <Text style={styles.appPackage} numberOfLines={1}>
-            {item.packageName}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const renderApp = useCallback(({item}: {item: AppInfo}) => (
+    <AppItem item={item} onPress={handleLaunch} />
+  ), [handleLaunch]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -256,6 +243,51 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     </SafeAreaView>
   );
 };
+
+// Icon cache to avoid re-fetching
+const iconCache: Record<string, string> = {};
+
+const AppItem = memo(({item, onPress}: {item: AppInfo; onPress: (pkg: string) => void}) => {
+  const [icon, setIcon] = useState<string>(iconCache[item.packageName] || '');
+  const CustomIcon = APP_ICON_MAP[item.packageName];
+
+  useEffect(() => {
+    if (!CustomIcon && !icon) {
+      getAppIcon(item.packageName).then(b64 => {
+        if (b64) {
+          iconCache[item.packageName] = b64;
+          setIcon(b64);
+        }
+      });
+    }
+  }, [item.packageName]);
+
+  return (
+    <TouchableOpacity
+      style={styles.appItem}
+      activeOpacity={0.7}
+      onPress={() => onPress(item.packageName)}>
+      <View style={styles.appIcon}>
+        {CustomIcon ? (
+          <CustomIcon size={18} />
+        ) : icon ? (
+          <Image
+            source={{uri: `data:image/png;base64,${icon}`}}
+            style={styles.appIconImg}
+          />
+        ) : (
+          <Text style={styles.appIconText}>{item.name.charAt(0).toUpperCase()}</Text>
+        )}
+      </View>
+      <View style={styles.appInfo}>
+        <Text style={styles.appName}>{item.name}</Text>
+        <Text style={styles.appPackage} numberOfLines={1}>
+          {item.packageName}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 const NavItem: React.FC<{label: string; active: boolean; onPress?: () => void}> = ({
   label,
@@ -392,6 +424,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textPrimary,
     fontWeight: '500',
+  },
+  appIconImg: {
+    width: 24,
+    height: 24,
+    borderRadius: 2,
   },
   appInfo: {
     flex: 1,

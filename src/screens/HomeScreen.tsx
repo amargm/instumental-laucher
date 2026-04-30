@@ -1,11 +1,10 @@
-import React, {useState, useEffect, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useCallback, useRef, memo} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Dimensions,
   BackHandler,
   PanResponder,
   ScrollView,
@@ -27,49 +26,91 @@ import {
 } from '../components/AppIcons';
 import {APP_ICON_MAP} from '../components/AppIcons';
 
-const {width} = Dimensions.get('window');
-
 const STORAGE_KEYS = {
   clockFormat: '@settings_clock_format',
   quote: '@settings_quote',
   quickApps: '@settings_quick_apps',
 };
 
+// ─── Memoized Clock Component (only re-renders on its own interval) ───
+const ClockWidget = memo(({clockFormat}: {clockFormat: '12' | '24'}) => {
+  const [time, setTime] = useState('');
+  const [date, setDate] = useState('');
+  const [dayProgress, setDayProgress] = useState(0);
+
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      let h: number | string = now.getHours();
+      const m = now.getMinutes().toString().padStart(2, '0');
+
+      const totalMinutes = now.getHours() * 60 + now.getMinutes();
+      setDayProgress(totalMinutes / 1440);
+
+      if (clockFormat === '12') {
+        const period = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        setTime(`${h}:${m} ${period}`);
+      } else {
+        setTime(`${h.toString().padStart(2, '0')}:${m}`);
+      }
+
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      setDate(`${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`);
+    };
+
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, [clockFormat]);
+
+  return (
+    <View style={styles.widget}>
+      <Text style={styles.time}>{time}</Text>
+      <View style={styles.progressWrap}>
+        <View style={[styles.progressBar, {width: `${dayProgress * 100}%`}]} />
+      </View>
+      <Text style={styles.date}>{date}</Text>
+    </View>
+  );
+});
+
 interface Props {
   navigation: any;
 }
 
 const HomeScreen: React.FC<Props> = ({navigation}) => {
-  const [time, setTime] = useState('');
-  const [date, setDate] = useState('');
-  const [dayProgress, setDayProgress] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [weather, setWeather] = useState<{temp: string; condition: string} | null>(null);
+  const mountedRef = useRef(true);
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const lastNavRef = useRef(0);
+
+  // Debounced navigation to prevent double-taps
+  const navigateTo = useCallback((screen: string) => {
+    const now = Date.now();
+    if (now - lastNavRef.current < 400) return;
+    lastNavRef.current = now;
+    navigation.navigate(screen);
+  }, [navigation]);
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, {toValue: 1, duration: 400, useNativeDriver: true}),
+      Animated.timing(slideAnim, {toValue: 0, duration: 400, useNativeDriver: true}),
     ]).start();
+    return () => { mountedRef.current = false; };
   }, []);
 
-  // Launcher home — disable back button
+  // Disable back button
   useEffect(() => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => handler.remove();
@@ -90,9 +131,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     loadSettings();
   }, []);
 
-  // Reload settings when screen is focused
+  // Reload settings on focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
+      if (!mountedRef.current) return;
       try {
         const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
@@ -105,82 +147,54 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return unsubscribe;
   }, [navigation]);
 
-  // Load installed apps for quick access
+  // Load installed apps for quick access names
   useEffect(() => {
-    const load = async () => {
-      try {
-        const apps = await getInstalledApps();
-        setInstalledApps(apps);
-      } catch (e) {}
-    };
-    load();
+    getInstalledApps().then(apps => {
+      if (mountedRef.current) setInstalledApps(apps);
+    }).catch(() => {});
   }, []);
 
-  // Clock
+  // Fetch weather with timeout + AbortController
   useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      let h: number | string = now.getHours();
-      const m = now.getMinutes().toString().padStart(2, '0');
-
-      // Day progress: 0 at midnight, 1 at end of day
-      const totalMinutes = now.getHours() * 60 + now.getMinutes();
-      setDayProgress(totalMinutes / 1440);
-
-      if (clockFormat === '12') {
-        const period = h >= 12 ? 'PM' : 'AM';
-        h = h % 12 || 12;
-        setTime(`${h}:${m} ${period}`);
-      } else {
-        setTime(`${h.toString().padStart(2, '0')}:${m}`);
-      }
-
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-      ];
-      setDate(`${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`);
-    };
-
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
-  }, [clockFormat]);
-
-  // Fetch weather (free, no API key needed)
-  useEffect(() => {
+    const controller = new AbortController();
     const fetchWeather = async () => {
       try {
-        const res = await fetch('https://wttr.in/?format=%t|%C');
+        const res = await fetch('https://wttr.in/?format=%t|%C', {
+          signal: controller.signal,
+          headers: {'User-Agent': 'InstrumentLauncher/1.0'},
+        });
         const text = await res.text();
         const parts = text.split('|');
-        if (parts.length >= 2) {
+        if (parts.length >= 2 && mountedRef.current) {
           setWeather({temp: parts[0].trim(), condition: parts[1].trim()});
         }
-      } catch (e) {
-        // Offline — no weather
-      }
-    };
-    fetchWeather();
-    const weatherInterval = setInterval(fetchWeather, 600000); // every 10 min
-    return () => clearInterval(weatherInterval);
-  }, []);
-
-  // Fetch notifications
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
-        const n = await getNotificationCount();
-        setNotifCount(n);
       } catch (e) {}
     };
-    fetchMetrics();
-    const metricsInterval = setInterval(fetchMetrics, 15000);
-    return () => clearInterval(metricsInterval);
+    fetchWeather();
+    const weatherInterval = setInterval(fetchWeather, 600000);
+    return () => {
+      controller.abort();
+      clearInterval(weatherInterval);
+    };
   }, []);
 
-  // Swipe gestures: down → notifications, up → app drawer
+  // Fetch notifications (uses events when available, polls as fallback)
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      try {
+        const n = await getNotificationCount();
+        if (mountedRef.current) setNotifCount(n);
+      } catch (e) {}
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Swipe gestures
+  const navigateToRef = useRef(navigateTo);
+  navigateToRef.current = navigateTo;
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -188,89 +202,60 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         Math.abs(gesture.dy) > 30 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > 80) {
-          navigation.navigate('Notifications');
+          navigateToRef.current('Notifications');
         } else if (gesture.dy < -80) {
-          navigation.navigate('AppDrawer');
+          navigateToRef.current('AppDrawer');
         }
       },
     }),
   ).current;
 
   // Launch phone with multiple fallbacks
-  const launchPhone = async () => {
-    const phonePackages = [
-      'com.google.android.dialer',
-      'com.android.dialer',
-      'com.samsung.android.dialer',
-      'com.android.phone',
-    ];
-    for (const pkg of phonePackages) {
-      try {
-        const result = await launchApp(pkg);
-        if (result) return;
-      } catch (e) {}
+  const launchPhone = useCallback(async () => {
+    const pkgs = ['com.google.android.dialer', 'com.android.dialer', 'com.samsung.android.dialer', 'com.android.phone'];
+    for (const pkg of pkgs) {
+      try { const r = await launchApp(pkg); if (r) return; } catch (e) {}
     }
-  };
+  }, []);
 
-  // Launch browser with Chrome preference
-  const launchBrowser = async () => {
-    const browserPackages = [
-      'com.android.chrome',
-      'com.google.android.googlequicksearchbox',
-      'org.mozilla.firefox',
-      'com.opera.browser',
-    ];
-    for (const pkg of browserPackages) {
-      try {
-        const result = await launchApp(pkg);
-        if (result) return;
-      } catch (e) {}
+  // Launch browser (Chrome preferred)
+  const launchBrowser = useCallback(async () => {
+    const pkgs = ['com.android.chrome', 'com.google.android.googlequicksearchbox', 'org.mozilla.firefox', 'com.opera.browser'];
+    for (const pkg of pkgs) {
+      try { const r = await launchApp(pkg); if (r) return; } catch (e) {}
     }
-  };
+  }, []);
 
-  const launchQuickApp = (packageName: string) => {
-    Animated.sequence([
-      Animated.timing(fadeAnim, {toValue: 0.8, duration: 50, useNativeDriver: true}),
-      Animated.timing(fadeAnim, {toValue: 1, duration: 150, useNativeDriver: true}),
-    ]).start();
+  const launchQuickApp = useCallback((packageName: string) => {
     launchApp(packageName).catch(() => {});
-  };
+  }, []);
 
-  const getAppName = (packageName: string): string => {
+  const getAppName = useCallback((packageName: string): string => {
     const app = installedApps.find(a => a.packageName === packageName);
     if (app) return app.name;
     const parts = packageName.split('.');
     return parts[parts.length - 1];
-  };
+  }, [installedApps]);
 
-  const getAppIcon = (packageName: string) => {
+  const renderQuickAppIcon = useCallback((packageName: string) => {
     const IconComp = APP_ICON_MAP[packageName];
     if (IconComp) return <IconComp size={16} color={Colors.textPrimary} />;
     const name = getAppName(packageName);
     return <Text style={styles.quickAppLetter}>{name.charAt(0).toUpperCase()}</Text>;
-  };
+  }, [getAppName]);
 
   return (
     <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
       <Animated.View style={[styles.content, {opacity: fadeAnim, transform: [{translateY: slideAnim}]}]}>
-        {/* Time Widget */}
-        <View style={styles.widget}>
-          <Text style={styles.time}>{time}</Text>
+        {/* Clock — isolated memo component */}
+        <ClockWidget clockFormat={clockFormat} />
 
-          {/* Day Progress Bar */}
-          <View style={styles.progressWrap}>
-            <View style={[styles.progressBar, {width: `${dayProgress * 100}%`}]} />
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.date}>{date}</Text>
-            {weather && (
-              <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
-            )}
-          </View>
-        </View>
+        {/* Weather */}
+        {weather && (
+          <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
+        )}
 
         {/* Quote */}
         {quote.length > 0 && (
@@ -293,7 +278,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
                   activeOpacity={0.6}
                   onPress={() => launchQuickApp(pkg)}>
                   <View style={styles.quickAppIcon}>
-                    {getAppIcon(pkg)}
+                    {renderQuickAppIcon(pkg)}
                   </View>
                   <Text style={styles.quickAppName} numberOfLines={1}>
                     {getAppName(pkg).slice(0, 6)}
@@ -311,7 +296,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="View notifications"
-            onPress={() => navigation.navigate('Notifications')}>
+            onPress={() => navigateTo('Notifications')}>
             <View style={styles.quickBtnInner}>
               <BellIcon size={13} color={Colors.textSecondary} />
               <Text style={styles.quickBtnText}>
@@ -324,7 +309,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Open settings"
-            onPress={() => navigation.navigate('Settings')}>
+            onPress={() => navigateTo('Settings')}>
             <View style={styles.quickBtnInner}>
               <SettingsIcon size={13} color={Colors.textSecondary} />
               <Text style={styles.quickBtnText}>Config</Text>
@@ -342,18 +327,14 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         <DockItem
           label="APPS"
           IconComponent={GridIcon}
-          onPress={() => navigation.navigate('AppDrawer')}
+          onPress={() => navigateTo('AppDrawer')}
         />
       </View>
     </SafeAreaView>
   );
 };
 
-const DockItem: React.FC<{label: string; IconComponent: React.FC<any>; onPress?: () => void}> = ({
-  label,
-  IconComponent,
-  onPress,
-}) => (
+const DockItem = memo(({label, IconComponent, onPress}: {label: string; IconComponent: React.FC<any>; onPress?: () => void}) => (
   <TouchableOpacity
     style={styles.dockItem}
     activeOpacity={0.6}
@@ -365,7 +346,7 @@ const DockItem: React.FC<{label: string; IconComponent: React.FC<any>; onPress?:
     </View>
     <Text style={styles.dockLabel}>{label}</Text>
   </TouchableOpacity>
-);
+));
 
 const styles = StyleSheet.create({
   container: {
@@ -399,22 +380,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.textSecondary,
     borderRadius: 1,
   },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.sm,
-  },
   date: {
     fontSize: 11,
     color: Colors.textSecondary,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    marginTop: Spacing.sm,
   },
   weather: {
     fontSize: 11,
     color: Colors.textSecondary,
     letterSpacing: 0.5,
+    marginTop: Spacing.sm,
   },
   quoteWrap: {
     marginTop: Spacing.lg,

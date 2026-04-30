@@ -1,6 +1,9 @@
 package com.instrument.launcher
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
@@ -9,12 +12,63 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
 import com.facebook.react.bridge.*
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.ByteArrayOutputStream
 
 class InstalledAppsModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
+    private var packageReceiver: BroadcastReceiver? = null
+
     override fun getName(): String = "InstalledApps"
+
+    override fun initialize() {
+        super.initialize()
+        registerPackageReceiver()
+    }
+
+    override fun invalidate() {
+        super.invalidate()
+        unregisterPackageReceiver()
+    }
+
+    private fun registerPackageReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        packageReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                emitEvent("onAppsChanged")
+            }
+        }
+        reactApplicationContext.registerReceiver(packageReceiver, filter)
+    }
+
+    private fun unregisterPackageReceiver() {
+        packageReceiver?.let {
+            try {
+                reactApplicationContext.unregisterReceiver(it)
+            } catch (e: Exception) {}
+        }
+        packageReceiver = null
+    }
+
+    private fun emitEvent(eventName: String) {
+        try {
+            reactApplicationContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(eventName, null)
+        } catch (e: Exception) {}
+    }
+
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
 
     @ReactMethod
     fun getApps(promise: Promise) {
@@ -33,20 +87,8 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
 
                 appInfo.putString("name", label)
                 appInfo.putString("packageName", packageName)
-
-                // Get app icon as base64
-                try {
-                    val icon = app.loadIcon(pm)
-                    val bitmap = drawableToBitmap(icon)
-                    val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 64, 64, true)
-                    val stream = ByteArrayOutputStream()
-                    scaledBitmap.compress(Bitmap.CompressFormat.PNG, 80, stream)
-                    val base64Icon = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
-                    appInfo.putString("icon", base64Icon)
-                    scaledBitmap.recycle()
-                } catch (e: Exception) {
-                    appInfo.putString("icon", "")
-                }
+                // No icon here — fetched lazily via getAppIcon()
+                appInfo.putString("icon", "")
 
                 result.pushMap(appInfo)
             }
@@ -54,6 +96,24 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getAppIcon(packageName: String, promise: Promise) {
+        try {
+            val pm = reactApplicationContext.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            val icon = pm.getApplicationIcon(appInfo)
+            val bitmap = drawableToBitmap(icon)
+            val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 48, 48, true)
+            val stream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.PNG, 70, stream)
+            val base64Icon = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+            scaledBitmap.recycle()
+            promise.resolve(base64Icon)
+        } catch (e: Exception) {
+            promise.resolve("")
         }
     }
 
