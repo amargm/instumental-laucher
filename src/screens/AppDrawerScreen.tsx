@@ -113,7 +113,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
       {/* App count */}
       <Text style={styles.appCount}>
-        {filteredApps.length} {filteredApps.length === 1 ? 'APP' : 'APPS'}
+        {loading ? 'Loading...' : `${filteredApps.length} ${filteredApps.length === 1 ? 'APP' : 'APPS'}`}
       </Text>
 
       {/* App List */}
@@ -132,6 +132,16 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
           offset: 56 * index,
           index,
         })}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {searchQuery ? `No apps match "${searchQuery}"` : 'No apps found'}
+              </Text>
+            </View>
+          ) : null
+        }
       />
 
       {/* Bottom Nav */}
@@ -264,6 +274,15 @@ const styles = StyleSheet.create({
   },
   navLabelActive: {
     color: Colors.textPrimary,
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textMuted,
   },
 });
 

@@ -1,32 +1,16 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
-
-interface SearchResult {
-  id: string;
-  text: string;
-  type: 'app' | 'contact' | 'setting' | 'file';
-}
-
-const RECENT_ITEMS: SearchResult[] = [
-  {id: '1', text: 'Browser', type: 'app'},
-  {id: '2', text: 'Display settings', type: 'setting'},
-  {id: '3', text: 'project_specs.pdf', type: 'file'},
-];
-
-const SUGGESTIONS: SearchResult[] = [
-  {id: '4', text: "Today's schedule", type: 'app'},
-  {id: '5', text: 'Battery settings', type: 'setting'},
-  {id: '6', text: 'WiFi configuration', type: 'setting'},
-];
+import {getInstalledApps, launchApp, AppInfo} from '../native/InstalledApps';
+import {APP_ICON_MAP} from '../components/AppIcons';
 
 interface Props {
   navigation: any;
@@ -34,15 +18,57 @@ interface Props {
 
 const SearchScreen: React.FC<Props> = ({navigation}) => {
   const [query, setQuery] = useState('');
+  const [apps, setApps] = useState<AppInfo[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'app': return '◈';
-      case 'contact': return '◉';
-      case 'setting': return '⚙';
-      case 'file': return '◱';
-      default: return '·';
-    }
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const installed = await getInstalledApps();
+        setApps(installed);
+      } catch (e) {}
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const filteredApps = query.length > 0
+    ? apps.filter(app =>
+        app.name.toLowerCase().includes(query.toLowerCase()) ||
+        app.packageName.toLowerCase().includes(query.toLowerCase()),
+      )
+    : [];
+
+  const handleLaunch = useCallback(async (packageName: string) => {
+    try {
+      await launchApp(packageName);
+    } catch (e) {}
+  }, []);
+
+  const getInitial = (name: string) => name.charAt(0).toUpperCase();
+
+  const renderApp = ({item}: {item: AppInfo}) => {
+    const CustomIcon = APP_ICON_MAP[item.packageName];
+    return (
+      <TouchableOpacity
+        style={styles.appItem}
+        activeOpacity={0.7}
+        onPress={() => handleLaunch(item.packageName)}>
+        <View style={styles.appIcon}>
+          {CustomIcon ? (
+            <CustomIcon size={16} />
+          ) : (
+            <Text style={styles.appIconText}>{getInitial(item.name)}</Text>
+          )}
+        </View>
+        <View style={styles.appInfo}>
+          <Text style={styles.appName}>{item.name}</Text>
+          <Text style={styles.appPackage} numberOfLines={1}>
+            {item.packageName}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -57,43 +83,50 @@ const SearchScreen: React.FC<Props> = ({navigation}) => {
 
       {/* Search Input */}
       <View style={styles.searchWrap}>
-        <Text style={styles.searchIcon}>⌕</Text>
+        <Text style={styles.searchPrefix}>{'/'}</Text>
         <TextInput
           style={styles.searchInput}
-          placeholder="type to search..."
+          placeholder="search apps..."
           placeholderTextColor={Colors.textMuted}
           value={query}
           onChangeText={setQuery}
           autoCapitalize="none"
           autoCorrect={false}
           autoFocus
+          returnKeyType="search"
         />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => setQuery('')}>
+            <Text style={styles.clearBtn}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Results */}
-      <ScrollView style={styles.results} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>RECENT</Text>
-        {RECENT_ITEMS.map(item => (
-          <TouchableOpacity key={item.id} style={styles.resultItem} activeOpacity={0.7}>
-            <View style={styles.resultIcon}>
-              <Text style={styles.resultIconText}>{getTypeIcon(item.type)}</Text>
-            </View>
-            <Text style={styles.resultText}>{item.text}</Text>
-            <Text style={styles.resultType}>{item.type.toUpperCase()}</Text>
-          </TouchableOpacity>
-        ))}
-
-        <Text style={styles.sectionTitle}>SUGGESTIONS</Text>
-        {SUGGESTIONS.map(item => (
-          <TouchableOpacity key={item.id} style={styles.resultItem} activeOpacity={0.7}>
-            <View style={styles.resultIcon}>
-              <Text style={styles.resultIconText}>{getTypeIcon(item.type)}</Text>
-            </View>
-            <Text style={styles.resultText}>{item.text}</Text>
-            <Text style={styles.resultType}>{item.type.toUpperCase()}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {query.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>
+            {apps.length > 0 ? `${apps.length} apps indexed` : 'Loading...'}
+          </Text>
+          <Text style={styles.emptyHint}>Start typing to search installed apps</Text>
+        </View>
+      ) : filteredApps.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No results</Text>
+          <Text style={styles.emptyHint}>No apps match "{query}"</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredApps}
+          keyExtractor={item => item.packageName}
+          renderItem={renderApp}
+          style={styles.list}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          initialNumToRender={10}
+        />
+      )}
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
@@ -111,7 +144,12 @@ const NavItem: React.FC<{label: string; active: boolean; onPress?: () => void}> 
   active,
   onPress,
 }) => (
-  <TouchableOpacity style={styles.navItem} activeOpacity={0.7} onPress={onPress}>
+  <TouchableOpacity
+    style={styles.navItem}
+    activeOpacity={0.7}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={label}>
     <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
   </TouchableOpacity>
 );
@@ -149,7 +187,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sharp,
     paddingHorizontal: Spacing.base,
   },
-  searchIcon: {
+  searchPrefix: {
+    fontFamily: 'monospace',
     fontSize: 16,
     color: Colors.textMuted,
     marginRight: Spacing.sm,
@@ -162,29 +201,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.5,
   },
-  results: {
+  clearBtn: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    padding: Spacing.sm,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 80,
+  },
+  emptyTitle: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+  },
+  emptyHint: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  list: {
     flex: 1,
     paddingHorizontal: Spacing.xl,
-    marginTop: Spacing.base,
+    marginTop: Spacing.sm,
   },
-  sectionTitle: {
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 2,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  resultItem: {
+  appItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  resultIcon: {
-    width: 32,
-    height: 32,
+  appIcon: {
+    width: 36,
+    height: 36,
     backgroundColor: Colors.surface2,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -192,21 +245,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  resultIconText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  resultText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.textPrimary,
-    letterSpacing: 0.3,
-  },
-  resultType: {
-    fontSize: 9,
+  appIconText: {
     fontFamily: 'monospace',
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  appInfo: {
+    flex: 1,
+  },
+  appName: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    marginBottom: 2,
+  },
+  appPackage: {
+    fontFamily: 'monospace',
+    fontSize: 10,
     color: Colors.textMuted,
-    letterSpacing: 1,
   },
   bottomNav: {
     flexDirection: 'row',

@@ -44,14 +44,36 @@ const App = () => {
             initialRouteName="Home"
             screenOptions={{
               headerShown: false,
-              animation: 'fade',
+              animation: 'fade_from_bottom',
+              animationDuration: 200,
               contentStyle: {backgroundColor: Colors.bg},
+              gestureEnabled: true,
             }}>
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="AppDrawer" component={AppDrawerScreen} />
-            <Stack.Screen name="Search" component={SearchScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="Notifications" component={NotificationScreen} />
+            <Stack.Screen
+              name="Home"
+              component={HomeScreen}
+              options={{animation: 'none'}}
+            />
+            <Stack.Screen
+              name="AppDrawer"
+              component={AppDrawerScreen}
+              options={{animation: 'slide_from_bottom'}}
+            />
+            <Stack.Screen
+              name="Search"
+              component={SearchScreen}
+              options={{animation: 'fade_from_bottom'}}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{animation: 'slide_from_right'}}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationScreen}
+              options={{animation: 'slide_from_bottom'}}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,64 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
+import {getBatteryInfo, isNotificationAccessGranted, openNotificationListenerSettings} from '../native/DeviceInfo';
+import {openSystemSettings} from '../native/InstalledApps';
 
 interface Props {
   navigation: any;
 }
 
+const STORAGE_KEYS = {
+  gesturesEnabled: '@settings_gestures',
+  showPackageNames: '@settings_package_names',
+};
+
 const SettingsScreen: React.FC<Props> = ({navigation}) => {
-  const [darkMode, setDarkMode] = useState(true);
-  const [notifications, setNotifications] = useState(true);
-  const [gestures, setGestures] = useState(true);
+  const [gesturesEnabled, setGesturesEnabled] = useState(true);
+  const [showPackageNames, setShowPackageNames] = useState(true);
+  const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
+  const [notifAccess, setNotifAccess] = useState(false);
+
+  // Load persisted settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const g = await AsyncStorage.getItem(STORAGE_KEYS.gesturesEnabled);
+        if (g !== null) setGesturesEnabled(g === 'true');
+        const p = await AsyncStorage.getItem(STORAGE_KEYS.showPackageNames);
+        if (p !== null) setShowPackageNames(p === 'true');
+      } catch (e) {}
+    };
+    loadSettings();
+  }, []);
+
+  // Load real device data
+  useEffect(() => {
+    const loadDeviceInfo = async () => {
+      try {
+        const b = await getBatteryInfo();
+        setBattery(b);
+      } catch (e) {}
+      try {
+        const access = await isNotificationAccessGranted();
+        setNotifAccess(access);
+      } catch (e) {}
+    };
+    loadDeviceInfo();
+  }, []);
+
+  const toggleGestures = async (value: boolean) => {
+    setGesturesEnabled(value);
+    await AsyncStorage.setItem(STORAGE_KEYS.gesturesEnabled, String(value));
+  };
+
+  const togglePackageNames = async (value: boolean) => {
+    setShowPackageNames(value);
+    await AsyncStorage.setItem(STORAGE_KEYS.showPackageNames, String(value));
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -30,116 +77,126 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
       </View>
 
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-        {/* Appearance */}
-        <Text style={styles.groupLabel}>APPEARANCE</Text>
+
+        {/* Launcher Settings */}
+        <Text style={styles.groupLabel}>LAUNCHER</Text>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>↕</Text>
+            <View>
+              <Text style={styles.settingName}>Swipe Gestures</Text>
+              <Text style={styles.settingDesc}>Swipe down/up on home screen</Text>
+            </View>
+          </View>
+          <Switch
+            value={gesturesEnabled}
+            onValueChange={toggleGestures}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={gesturesEnabled ? Colors.bg : Colors.textMuted}
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>◈</Text>
+            <View>
+              <Text style={styles.settingName}>Show Package Names</Text>
+              <Text style={styles.settingDesc}>Display package IDs in app drawer</Text>
+            </View>
+          </View>
+          <Switch
+            value={showPackageNames}
+            onValueChange={togglePackageNames}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={showPackageNames ? Colors.bg : Colors.textMuted}
+          />
+        </View>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
             <Text style={styles.settingIcon}>◐</Text>
-            <Text style={styles.settingName}>Dark Mode</Text>
+            <View>
+              <Text style={styles.settingName}>Theme</Text>
+              <Text style={styles.settingDesc}>Always dark</Text>
+            </View>
           </View>
-          <Switch
-            value={darkMode}
-            onValueChange={setDarkMode}
-            trackColor={{false: Colors.surface2, true: Colors.accent}}
-            thumbColor={darkMode ? Colors.bg : Colors.textMuted}
-          />
+          <Text style={styles.settingValue}>DARK</Text>
         </View>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
             <Text style={styles.settingIcon}>Aa</Text>
-            <Text style={styles.settingName}>Typography</Text>
+            <View>
+              <Text style={styles.settingName}>Typography</Text>
+              <Text style={styles.settingDesc}>System monospace</Text>
+            </View>
           </View>
-          <Text style={styles.settingValue}>Mono</Text>
+          <Text style={styles.settingValue}>MONO</Text>
         </View>
 
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>▦</Text>
-            <Text style={styles.settingName}>Layout Density</Text>
-          </View>
-          <Text style={styles.settingValue}>Compact</Text>
-        </View>
+        {/* Permissions */}
+        <Text style={styles.groupLabel}>PERMISSIONS</Text>
 
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>◇</Text>
-            <Text style={styles.settingName}>Icon Pack</Text>
-          </View>
-          <Text style={styles.settingValue}>Line</Text>
-        </View>
-
-        {/* Behavior */}
-        <Text style={styles.groupLabel}>BEHAVIOR</Text>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>⊞</Text>
-            <Text style={styles.settingName}>App Drawer Style</Text>
-          </View>
-          <Text style={styles.settingValue}>List</Text>
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>⌕</Text>
-            <Text style={styles.settingName}>Search Engine</Text>
-          </View>
-          <Text style={styles.settingValue}>DuckDuckGo</Text>
-        </View>
-
-        <View style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          activeOpacity={0.7}
+          onPress={() => openNotificationListenerSettings()}>
           <View style={styles.settingLeft}>
             <Text style={styles.settingIcon}>◉</Text>
-            <Text style={styles.settingName}>Notifications</Text>
+            <View>
+              <Text style={styles.settingName}>Notification Access</Text>
+              <Text style={styles.settingDesc}>
+                {notifAccess ? 'Granted — tap to manage' : 'Not granted — tap to enable'}
+              </Text>
+            </View>
           </View>
-          <Switch
-            value={notifications}
-            onValueChange={setNotifications}
-            trackColor={{false: Colors.surface2, true: Colors.accent}}
-            thumbColor={notifications ? Colors.bg : Colors.textMuted}
-          />
-        </View>
+          <Text style={[styles.settingValue, notifAccess && styles.settingValueActive]}>
+            {notifAccess ? 'ON' : 'OFF'}
+          </Text>
+        </TouchableOpacity>
 
-        <View style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          activeOpacity={0.7}
+          onPress={() => openSystemSettings()}>
           <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>↕</Text>
-            <Text style={styles.settingName}>Gestures</Text>
+            <Text style={styles.settingIcon}>⚙</Text>
+            <View>
+              <Text style={styles.settingName}>System Settings</Text>
+              <Text style={styles.settingDesc}>Open Android settings</Text>
+            </View>
           </View>
-          <Switch
-            value={gestures}
-            onValueChange={setGestures}
-            trackColor={{false: Colors.surface2, true: Colors.accent}}
-            thumbColor={gestures ? Colors.bg : Colors.textMuted}
-          />
-        </View>
+          <Text style={styles.settingValue}>→</Text>
+        </TouchableOpacity>
 
-        {/* System */}
-        <Text style={styles.groupLabel}>SYSTEM</Text>
+        {/* Device Info */}
+        <Text style={styles.groupLabel}>DEVICE</Text>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
             <Text style={styles.settingIcon}>▮</Text>
-            <Text style={styles.settingName}>Battery</Text>
+            <View>
+              <Text style={styles.settingName}>Battery</Text>
+              <Text style={styles.settingDesc}>
+                {battery.isCharging ? 'Charging' : 'Discharging'} · {battery.temperature}°C
+              </Text>
+            </View>
           </View>
-          <Text style={styles.settingValue}>78%</Text>
+          <Text style={styles.settingValue}>{battery.level}%</Text>
         </View>
+
+        {/* About */}
+        <Text style={styles.groupLabel}>ABOUT</Text>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>⚿</Text>
-            <Text style={styles.settingName}>Security</Text>
+            <Text style={styles.settingIcon}>I</Text>
+            <View>
+              <Text style={styles.settingName}>Instrument Launcher</Text>
+              <Text style={styles.settingDesc}>Version 1.0.0</Text>
+            </View>
           </View>
-          <Text style={styles.settingValue}>Biometric</Text>
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>⛊</Text>
-            <Text style={styles.settingName}>Privacy</Text>
-          </View>
-          <Text style={styles.settingValue}>Strict</Text>
         </View>
 
         <View style={{height: 80}} />
@@ -161,7 +218,12 @@ const NavItem: React.FC<{label: string; active: boolean; onPress?: () => void}> 
   active,
   onPress,
 }) => (
-  <TouchableOpacity style={styles.navItem} activeOpacity={0.7} onPress={onPress}>
+  <TouchableOpacity
+    style={styles.navItem}
+    activeOpacity={0.7}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={label}>
     <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
   </TouchableOpacity>
 );
@@ -214,6 +276,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   settingIcon: {
     fontSize: 14,
@@ -226,10 +289,18 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: 0.3,
   },
+  settingDesc: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
   settingValue: {
     fontFamily: 'monospace',
     fontSize: 11,
     color: Colors.textMuted,
+  },
+  settingValueActive: {
+    color: Colors.success,
   },
   bottomNav: {
     flexDirection: 'row',
