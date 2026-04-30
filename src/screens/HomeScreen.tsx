@@ -12,6 +12,12 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import ReanimatedAnimated, {
+  useAnimatedSensor,
+  SensorType,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
 import {
@@ -37,11 +43,27 @@ const DEFAULT_DOCK: {pkg: string; label: string}[] = [
 
 const DEFAULT_ACCENT = '#FFFFFF';
 
-// ─── Memoized Clock Component (only re-renders on its own interval) ───
+// ─── Glitch characters for the glitch text effect ───
+const GLITCH_CHARS = '!@#$%&*░▒▓█▀▄';
+
+// ─── Memoized Clock Component with parallax + glitch ───
 const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24'; accentColor: string}) => {
   const [time, setTime] = useState('');
+  const [displayTime, setDisplayTime] = useState('');
   const [date, setDate] = useState('');
   const [dayProgress, setDayProgress] = useState(0);
+
+  // Parallax via gyroscope
+  const sensor = useAnimatedSensor(SensorType.ROTATION, {interval: 60});
+  const parallaxStyle = useAnimatedStyle(() => {
+    const {pitch, roll} = sensor.sensor.value;
+    return {
+      transform: [
+        {translateX: withSpring(roll * 8, {damping: 20, stiffness: 90})},
+        {translateY: withSpring(pitch * 5, {damping: 20, stiffness: 90})},
+      ],
+    };
+  });
 
   useEffect(() => {
     const updateClock = () => {
@@ -52,13 +74,16 @@ const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24';
       const totalMinutes = now.getHours() * 60 + now.getMinutes();
       setDayProgress(totalMinutes / 1440);
 
+      let timeStr: string;
       if (clockFormat === '12') {
         const period = h >= 12 ? 'PM' : 'AM';
         h = h % 12 || 12;
-        setTime(`${h}:${m} ${period}`);
+        timeStr = `${h}:${m} ${period}`;
       } else {
-        setTime(`${h.toString().padStart(2, '0')}:${m}`);
+        timeStr = `${h.toString().padStart(2, '0')}:${m}`;
       }
+      setTime(timeStr);
+      setDisplayTime(timeStr);
 
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -70,9 +95,42 @@ const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24';
     return () => clearInterval(interval);
   }, [clockFormat]);
 
+  // Glitch text effect — occasional subtle character swap
+  useEffect(() => {
+    const scheduleGlitch = () => {
+      const delay = 3000 + Math.random() * 7000; // 3-10 seconds
+      return setTimeout(() => {
+        setDisplayTime(prev => {
+          if (!prev || prev.length === 0) return prev;
+          const idx = Math.floor(Math.random() * prev.length);
+          // Don't glitch spaces or colons
+          if (prev[idx] === ' ' || prev[idx] === ':') return prev;
+          const glitchChar = GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+          return prev.substring(0, idx) + glitchChar + prev.substring(idx + 1);
+        });
+        // Revert after 80ms
+        setTimeout(() => {
+          setDisplayTime(time);
+        }, 80);
+      }, delay);
+    };
+
+    const timeoutId = scheduleGlitch();
+    const intervalId = setInterval(() => {
+      scheduleGlitch();
+    }, 5000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, [time]);
+
   return (
     <View style={styles.widget}>
-      <Text style={styles.time}>{time}</Text>
+      <ReanimatedAnimated.View style={parallaxStyle}>
+        <Text style={styles.time}>{displayTime}</Text>
+      </ReanimatedAnimated.View>
       <View style={styles.progressWrap}>
         <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
       </View>
@@ -98,6 +156,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  // Launch animation
+  const launchScale = useRef(new Animated.Value(1)).current;
+  const launchOpacity = useRef(new Animated.Value(1)).current;
   const lastNavRef = useRef(0);
 
   // Debounced navigation to prevent double-taps
@@ -107,6 +168,16 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     lastNavRef.current = now;
     navigation.navigate(screen);
   }, [navigation]);
+
+  // Smooth scale-up + fade-out animation when launching an app
+  const launchWithAnimation = useCallback((packageName: string) => {
+    Animated.parallel([
+      Animated.timing(launchScale, {toValue: 1.04, duration: 150, useNativeDriver: true}),
+      Animated.timing(launchOpacity, {toValue: 0, duration: 150, useNativeDriver: true}),
+    ]).start(() => {
+      launchApp(packageName).catch(() => {});
+    });
+  }, [launchScale, launchOpacity]);
 
   useEffect(() => {
     Animated.parallel([
@@ -145,6 +216,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
       if (!mountedRef.current) return;
+      // Reset launch animation
+      launchScale.setValue(1);
+      launchOpacity.setValue(1);
       try {
         const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
@@ -213,8 +287,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
 
 
   const launchQuickApp = useCallback((packageName: string) => {
-    launchApp(packageName).catch(() => {});
-  }, []);
+    launchWithAnimation(packageName);
+  }, [launchWithAnimation]);
 
   const getAppName = useCallback((packageName: string): string => {
     const app = installedApps.find(a => a.packageName === packageName);
@@ -234,55 +308,57 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
-      <Animated.View style={[styles.content, {opacity: fadeAnim, transform: [{translateY: slideAnim}]}]}>
-        {/* Settings — subtle top-right icon */}
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          activeOpacity={0.6}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-          onPress={() => navigateTo('Settings')}>
-          <SettingsIcon size={14} color={Colors.textMuted} />
-        </TouchableOpacity>
+      <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}]}]}>
+        <Animated.View style={[styles.content, {opacity: fadeAnim, transform: [{translateY: slideAnim}]}]}>
+          {/* Settings — subtle top-right icon */}
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            activeOpacity={0.6}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            onPress={() => navigateTo('Settings')}>
+            <SettingsIcon size={14} color={Colors.textMuted} />
+          </TouchableOpacity>
 
-        {/* Clock — isolated memo component */}
-        <ClockWidget clockFormat={clockFormat} accentColor={accentColor} />
+          {/* Clock — isolated memo component */}
+          <ClockWidget clockFormat={clockFormat} accentColor={accentColor} />
 
-        {/* Weather */}
-        {weather && (
-          <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
-        )}
+          {/* Weather */}
+          {weather && (
+            <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
+          )}
 
-        {/* Quote */}
-        {quote.length > 0 && (
-          <View style={styles.quoteWrap}>
-            <Text style={styles.quoteText}>"{quote}"</Text>
-          </View>
-        )}
+          {/* Quote */}
+          {quote.length > 0 && (
+            <View style={[styles.quoteWrap, {borderLeftColor: accentColor}]}>
+              <Text style={styles.quoteText}>"{quote}"</Text>
+            </View>
+          )}
 
-        {/* Quick Access Apps */}
-        {quickApps.length > 0 && (
-          <View style={styles.quickAppsSection}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickAppsScroll}>
-              {quickApps.map((pkg) => (
-                <TouchableOpacity
-                  key={pkg}
-                  style={styles.quickAppItem}
-                  activeOpacity={0.6}
-                  onPress={() => launchQuickApp(pkg)}>
-                  <View style={styles.quickAppIcon}>
-                    {renderQuickAppIcon(pkg)}
-                  </View>
-                  <Text style={styles.quickAppName} numberOfLines={1}>
-                    {getAppName(pkg).slice(0, 6)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
+          {/* Quick Access Apps */}
+          {quickApps.length > 0 && (
+            <View style={styles.quickAppsSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.quickAppsScroll}>
+                {quickApps.map((pkg) => (
+                  <TouchableOpacity
+                    key={pkg}
+                    style={styles.quickAppItem}
+                    activeOpacity={0.6}
+                    onPress={() => launchQuickApp(pkg)}>
+                    <View style={styles.quickAppIcon}>
+                      {renderQuickAppIcon(pkg)}
+                    </View>
+                    <Text style={styles.quickAppName} numberOfLines={1}>
+                      {getAppName(pkg).slice(0, 6)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </Animated.View>
       </Animated.View>
 
       {/* Favorites Dock — customizable */}
@@ -297,7 +373,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
               label={label}
               IconComponent={IconComp}
               fallbackLetter={name.charAt(0).toUpperCase()}
-              onPress={() => launchApp(pkg).catch(() => {})}
+              onPress={() => launchWithAnimation(pkg)}
             />
           );
         })}

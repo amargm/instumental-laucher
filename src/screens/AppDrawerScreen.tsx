@@ -9,6 +9,7 @@ import {
   BackHandler,
   ScrollView,
   Image,
+  Animated,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -34,6 +35,9 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const [apps, setApps] = useState<AppInfo[]>(cachedApps);
   const [loading, setLoading] = useState(cachedApps.length === 0);
   const searchInputRef = useRef<TextInput>(null);
+  // Launch animation
+  const launchScale = useRef(new Animated.Value(1)).current;
+  const launchOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     loadApps();
@@ -121,12 +125,22 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   });
 
   const handleLaunch = useCallback(async (packageName: string) => {
-    try {
-      await launchApp(packageName);
-    } catch (e) {
-      console.warn('Failed to launch:', packageName, e);
-    }
-  }, []);
+    Animated.parallel([
+      Animated.timing(launchScale, {toValue: 1.04, duration: 150, useNativeDriver: true}),
+      Animated.timing(launchOpacity, {toValue: 0, duration: 150, useNativeDriver: true}),
+    ]).start(() => {
+      launchApp(packageName).catch(e => console.warn('Failed to launch:', packageName, e));
+    });
+  }, [launchScale, launchOpacity]);
+
+  // Reset launch animation on focus return
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      launchScale.setValue(1);
+      launchOpacity.setValue(1);
+    });
+    return unsubscribe;
+  }, [navigation, launchScale, launchOpacity]);
 
   const renderApp = useCallback(({item}: {item: AppInfo}) => (
     <AppItem item={item} onPress={handleLaunch} />
@@ -134,6 +148,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}]}]}>
       {/* Header — switches between title mode and search mode */}
       {!searchVisible ? (
         <View style={styles.header}>
@@ -227,6 +242,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
         <NavItem label="APPS" active={true} />
         <NavItem label="CONFIG" active={false} onPress={() => navigation.navigate('Settings')} />
       </View>
+      </Animated.View>
     </SafeAreaView>
   );
 };
