@@ -123,6 +123,15 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
         renderItem={renderApp}
         style={styles.list}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
+        getItemLayout={(_, index) => ({
+          length: 56,
+          offset: 56 * index,
+          index,
+        })}
       />
 
       {/* Bottom Nav */}

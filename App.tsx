@@ -11,6 +11,7 @@ import SearchScreen from './src/screens/SearchScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import NotificationScreen from './src/screens/NotificationScreen';
 import {Colors} from './src/theme/tokens';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -24,6 +25,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const App = () => {
   return (
+    <ErrorBoundary>
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <NavigationContainer
@@ -54,6 +56,7 @@ const App = () => {
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 };
 

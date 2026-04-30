@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StatusBar,
   Dimensions,
   BackHandler,
+  PanResponder,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -78,8 +79,24 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return () => clearInterval(metricsInterval);
   }, []);
 
+  // Swipe gestures: down → notifications, up → app drawer
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dy) > 30 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 80) {
+          navigation.navigate('Notifications');
+        } else if (gesture.dy < -80) {
+          navigation.navigate('AppDrawer');
+        }
+      },
+    }),
+  ).current;
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
       {/* Time Widget */}
@@ -98,6 +115,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         <TouchableOpacity
           style={styles.quickBtn}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Search apps"
           onPress={() => navigation.navigate('Search')}>
           <View style={styles.quickBtnInner}>
             <SearchIcon size={13} color={Colors.textSecondary} />
@@ -107,6 +126,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         <TouchableOpacity
           style={styles.quickBtn}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="View notifications"
           onPress={() => navigation.navigate('Notifications')}>
           <View style={styles.quickBtnInner}>
             <BellIcon size={13} color={Colors.textSecondary} />
@@ -116,6 +137,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         <TouchableOpacity
           style={styles.quickBtn}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
           onPress={() => navigation.navigate('Settings')}>
           <View style={styles.quickBtnInner}>
             <SettingsIcon size={13} color={Colors.textSecondary} />
@@ -152,7 +175,12 @@ const DockItem: React.FC<{label: string; IconComponent: React.FC<any>; onPress?:
   IconComponent,
   onPress,
 }) => (
-  <TouchableOpacity style={styles.dockItem} activeOpacity={0.7} onPress={onPress}>
+  <TouchableOpacity
+    style={styles.dockItem}
+    activeOpacity={0.7}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={`Open ${label}`}>
     <View style={styles.dockIcon}>
       <IconComponent size={18} />
     </View>
