@@ -27,6 +27,8 @@ import {tick, impact} from '../native/Haptics';
 import {NavItem} from '../components/NavItem';
 import {useTheme} from '../hooks/useTheme';
 import {useBackToHome} from '../hooks/useBackToHome';
+import {updateSettings} from '../store/settings';
+import {HabitWidget} from '../components/HabitWidget';
 
 const ACCENT_COLORS = [
   '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96E6A1',
@@ -35,7 +37,6 @@ const ACCENT_COLORS = [
 
 const SettingsScreen: React.FC<Props> = ({navigation}) => {
   useTheme(); // re-render on theme change
-  const [ready, setReady] = useState(false);
   const [gesturesEnabled, setGesturesEnabled] = useState(true);
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
@@ -104,7 +105,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
           applyTheme(th as ThemeName);
         }
       } catch (e) {}
-      setReady(true);
     };
     loadSettings();
   }, []);
@@ -173,20 +173,20 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
   const toggleGestures = async (value: boolean) => {
     setGesturesEnabled(value);
-    safeSave(STORAGE_KEYS.gesturesEnabled, String(value));
+    updateSettings({gesturesEnabled: value});
   };
 
   const toggleClockFormat = async () => {
     tick();
     const newFmt = clockFormat === '24' ? '12' : '24';
     setClockFormat(newFmt);
-    safeSave(STORAGE_KEYS.clockFormat, newFmt);
+    updateSettings({clockFormat: newFmt});
   };
 
   const saveQuote = async (text: string) => {
     const trimmed = text.slice(0, 100);
     setQuote(trimmed);
-    safeSave(STORAGE_KEYS.quote, trimmed);
+    updateSettings({quote: trimmed});
   };
 
   const toggleQuickApp = async (packageName: string) => {
@@ -194,11 +194,11 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     if (quickApps.includes(packageName)) {
       updated = quickApps.filter(p => p !== packageName);
     } else {
-      if (quickApps.length >= 5) return; // max 5
+      if (quickApps.length >= 5) return;
       updated = [...quickApps, packageName];
     }
     setQuickApps(updated);
-    safeSave(STORAGE_KEYS.quickApps, JSON.stringify(updated));
+    updateSettings({quickApps: updated});
   };
 
   const toggleDockApp = async (packageName: string) => {
@@ -206,41 +206,41 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     if (dockApps.includes(packageName)) {
       updated = dockApps.filter(p => p !== packageName);
     } else {
-      if (dockApps.length >= 4) return; // max 4
+      if (dockApps.length >= 4) return;
       updated = [...dockApps, packageName];
     }
     setDockApps(updated);
-    safeSave(STORAGE_KEYS.dockApps, JSON.stringify(updated));
+    updateSettings({dockApps: updated});
   };
 
   const selectAccent = (color: string) => {
     tick();
     setAccentColor(color);
-    safeSave(STORAGE_KEYS.accentColor, color);
+    updateSettings({accentColor: color});
   };
 
   const toggleGlitch = (value: boolean) => {
     tick();
     setGlitchEnabled(value);
-    safeSave(STORAGE_KEYS.glitchEnabled, String(value));
+    updateSettings({glitchEnabled: value});
   };
 
   const toggleParallax = (value: boolean) => {
     tick();
     setParallaxEnabled(value);
-    safeSave(STORAGE_KEYS.parallaxEnabled, String(value));
+    updateSettings({parallaxEnabled: value});
   };
 
   const toggleRain = (value: boolean) => {
     tick();
     setRainEnabled(value);
-    safeSave(STORAGE_KEYS.rainEnabled, String(value));
+    updateSettings({rainEnabled: value});
   };
 
   const togglePet = (value: boolean) => {
     tick();
     setPetEnabled(value);
-    safeSave(STORAGE_KEYS.petEnabled, String(value));
+    updateSettings({petEnabled: value});
   };
 
   const cycleBgEffect = () => {
@@ -248,7 +248,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     const idx = BG_EFFECTS.indexOf(bgEffect);
     const next = BG_EFFECTS[(idx + 1) % BG_EFFECTS.length];
     setBgEffect(next);
-    safeSave(STORAGE_KEYS.bgEffect, next);
+    updateSettings({bgEffect: next});
   };
 
   const cycleTheme = () => {
@@ -262,9 +262,9 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
   if (showAppPicker) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>SELECT APPS ({quickApps.length}/5)</Text>
+      <SafeAreaView style={[styles.container, {backgroundColor: Colors.bg}]}>
+        <View style={[styles.header, {borderBottomColor: Colors.surface2}]}>
+          <Text style={[styles.title, {color: Colors.textPrimary}]}>SELECT APPS ({quickApps.length}/5)</Text>
           <TouchableOpacity onPress={() => setShowAppPicker(false)}>
             <Text style={styles.closeBtn}>DONE</Text>
           </TouchableOpacity>
@@ -313,9 +313,9 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
   if (showDockPicker) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>DOCK APPS ({dockApps.length}/4)</Text>
+      <SafeAreaView style={[styles.container, {backgroundColor: Colors.bg}]}>
+        <View style={[styles.header, {borderBottomColor: Colors.surface2}]}>
+          <Text style={[styles.title, {color: Colors.textPrimary}]}>DOCK APPS ({dockApps.length}/4)</Text>
           <TouchableOpacity onPress={() => setShowDockPicker(false)}>
             <Text style={styles.closeBtn}>DONE</Text>
           </TouchableOpacity>
@@ -362,15 +362,11 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     );
   }
 
-  if (!ready) {
-    return <SafeAreaView style={styles.container} />;
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, {backgroundColor: Colors.bg}]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>CONFIGURATION</Text>
+      <View style={[styles.header, {borderBottomColor: Colors.surface2}]}>
+        <Text style={[styles.title, {color: Colors.textPrimary}]}>CONFIGURATION</Text>
         <TouchableOpacity onPress={() => { try { navigation.navigate('Home'); } catch (e) {} }}>
           <Text style={styles.closeBtn}>✕</Text>
         </TouchableOpacity>
@@ -407,7 +403,12 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         </TouchableOpacity>
 
         {/* Home Screen */}
-        <Text style={styles.groupLabel}>HOME SCREEN</Text>
+        <Text style={[styles.groupLabel, {color: Colors.textMuted}]}>HOME SCREEN</Text>
+
+        {/* Habits — full management (add/delete/log) */}
+        <View style={{marginBottom: Spacing.md}}>
+          <HabitWidget accentColor={accentColor} active={true} readOnly={false} />
+        </View>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
@@ -718,7 +719,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
       </ScrollView>
 
       {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, {borderTopColor: Colors.border, backgroundColor: Colors.bg}]}>
         <NavItem label="HOME" active={false} onPress={() => navigation.navigate('Home')} />
         <NavItem label="APPS" active={false} onPress={() => navigation.navigate('AppDrawer')} />
         <NavItem label="CONFIG" active={true} />

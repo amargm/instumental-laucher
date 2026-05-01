@@ -25,11 +25,12 @@ import {
 interface Props {
   accentColor: string;
   active: boolean;
+  readOnly?: boolean; // When true, only allow view + log (no add/delete)
 }
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-export const HabitWidget: React.FC<Props> = ({accentColor, active}) => {
+export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = false}) => {
   const [data, setData] = useState<HabitData>({habits: [], logs: {}});
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -99,6 +100,7 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active}) => {
   };
 
   if (data.habits.length === 0 && !expanded) {
+    if (readOnly) return null; // Nothing to show on home screen
     // Show minimal add prompt
     return (
       <TouchableOpacity
@@ -136,7 +138,7 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active}) => {
               style={styles.habitMain}
               activeOpacity={0.6}
               onPress={() => handleLog(habit)}
-              onLongPress={() => { if (expanded) handleRemove(habit); }}>
+              onLongPress={!readOnly && expanded ? () => handleRemove(habit) : undefined}>
               <Text style={[styles.habitName, done && {color: accentColor}]}>
                 {done ? '✓ ' : ''}{habit.name}
               </Text>
@@ -178,8 +180,8 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active}) => {
         );
       })}
 
-      {/* Expanded: Add button / form */}
-      {expanded && !adding && (
+      {/* Expanded: Add button / form (only in config mode) */}
+      {!readOnly && expanded && !adding && (
         <TouchableOpacity
           style={styles.addBtn}
           activeOpacity={0.6}
@@ -188,7 +190,7 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active}) => {
         </TouchableOpacity>
       )}
 
-      {expanded && adding && (
+      {!readOnly && expanded && adding && (
         <View style={styles.addForm}>
           <TextInput
             style={styles.addInput}
@@ -219,7 +221,7 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active}) => {
         </View>
       )}
 
-      {expanded && (
+      {!readOnly && expanded && (
         <Text style={styles.hint}>tap = log · long-press = delete</Text>
       )}
     </View>

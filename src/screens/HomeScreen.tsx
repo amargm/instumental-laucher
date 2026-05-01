@@ -283,9 +283,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             </Animated.View>
           )}
 
-          {/* Habit Widget */}
+          {/* Habit Widget — view + log only (add/delete in Settings) */}
           <Animated.View style={{opacity: habitAnim, transform: [{translateY: habitAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
-            <HabitWidget accentColor={settings.accentColor} active={appActive} />
+            <HabitWidget accentColor={settings.accentColor} active={appActive} readOnly={true} />
           </Animated.View>
 
           {/* Pixel Pet */}

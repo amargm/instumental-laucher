@@ -289,7 +289,7 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     : '';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, {backgroundColor: Colors.bg}]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>TERMINAL</Text>

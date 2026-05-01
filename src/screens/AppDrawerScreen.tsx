@@ -264,7 +264,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   ), [handleLaunch, handleLongPress]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, {backgroundColor: Colors.bg}]}>
       <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}]}]}>
       {/* Header — switches between title mode and search mode */}
       {!searchVisible ? (
@@ -351,7 +351,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       </Animated.View>
 
       {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, {borderTopColor: Colors.border, backgroundColor: Colors.bg}]}>
         <NavItem label="HOME" active={false} onPress={() => navigation.navigate('Home')} />
         <NavItem label="APPS" active={true} />
         <NavItem label="CONFIG" active={false} onPress={() => navigation.navigate('Settings')} />

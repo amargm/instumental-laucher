@@ -15,7 +15,7 @@ export const NavItem: React.FC<NavItemProps> = ({label, active, onPress}) => (
     onPress={onPress}
     accessibilityRole="button"
     accessibilityLabel={label}>
-    <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
+    <Text style={[styles.navLabel, {color: active ? Colors.textPrimary : Colors.textMuted}]}>{label}</Text>
   </TouchableOpacity>
 );
 
@@ -27,10 +27,6 @@ const styles = StyleSheet.create({
   navLabel: {
     fontFamily: 'monospace',
     fontSize: 11,
-    color: Colors.textMuted,
     letterSpacing: 2,
-  },
-  navLabelActive: {
-    color: Colors.textPrimary,
   },
 });

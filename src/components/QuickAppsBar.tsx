@@ -1,5 +1,5 @@
 import React, {useRef, useCallback, useEffect, memo} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, Animated} from 'react-native';
 import {Colors, Spacing} from '../theme/tokens';
 import {APP_ICON_MAP} from './AppIcons';
 import {AppInfo} from '../native/InstalledApps';
@@ -43,10 +43,7 @@ const QuickAppsBar = memo(({quickApps, installedApps, onAppPress}: QuickAppsBarP
 
   return (
     <View style={styles.quickAppsSection}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.quickAppsScroll}>
+      <View style={styles.quickAppsRow}>
         {quickApps.map((pkg) => {
           const scale = getScale(pkg);
           return (
@@ -67,7 +64,7 @@ const QuickAppsBar = memo(({quickApps, installedApps, onAppPress}: QuickAppsBarP
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
     </View>
   );
 });
@@ -76,9 +73,11 @@ const styles = StyleSheet.create({
   quickAppsSection: {
     marginTop: Spacing.xl,
   },
-  quickAppsScroll: {
+  quickAppsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 12,
-    paddingRight: Spacing.md,
   },
   quickAppItem: {
     alignItems: 'center',
