@@ -1,342 +1,360 @@
-# INSTRUMENT Launcher — Brainstorm v2
+# INSTRUMENT Launcher — Brainstorm v3
 
-## ✅ Already Implemented
-- Custom dock apps (4 user-selectable, piano keys design)
-- Accent color picker (10 presets, affects progress bar + quote line)
-- Smooth app open animation (scale-up + fade-out, 150ms)
-- Parallax clock (gyroscope tilt, toggle-able)
-- Glitch text effect (character swap, toggle-able)
+> Last updated: May 2026
+> Total features shipped: 32 | Screens: 4 | Native modules: 3
+
+---
+
+## 📋 Current Feature Inventory
+
+### ✅ Shipped & Working
+- Two dock styles: **Terminal** (monospace labels + underline, default) and **Piano** (alternating black/white keys)
+- Dock style selector in Settings (persisted)
+- Accent color picker (10 presets, affects progress bars, quote border, pet, dock highlights)
+- Smooth app open animation (scale 1→1.04 + fade-out, 150ms)
+- Parallax clock (gyroscope tilt via react-native-reanimated, toggle-able)
+- Multi-mode glitch text (cascade/flicker/single char, 4-10s interval, toggle-able)
 - ASCII art clock mode (box-drawing digits, toggle-able)
 - Day progress bar with "DAY" label + percentage
 - Week progress bar with "WK" label (Mon→Sun)
-- Quote with accent-colored border
-- Quick access apps (10 max, spring press feedback)
-- Swipe gestures (down→notifications, up→app drawer)
-- Category filters in app drawer (6 categories)
-- Headphone context shortcuts (music apps surface first when connected)
-- Weather from wttr.in (auto-refresh 10min)
-- Rain effect (particle drops when weather reports rain, toggle-able)
-- Pixel pet (ASCII creature, health system, mood states)
-- Reaction time game (hidden: long-press pet for 0.6s)
-- Notification panel with dismiss
-- Crash logging + error boundaries
-- Settings: clock format, aesthetics toggles, gesture toggle
-- Piano keys dock (alternating white/black, press-to-reveal labels)
-- Staggered home screen mount cascade (clock→weather→quote→pet→apps→dock)
-- Touch feedback: settings gear rotation, quick app spring scale, pet long-press pulse
-- Dock slide-up animation on every home focus
-- Screen transitions: fade back-to-home (120ms), slide settings (150ms), slide drawer (100ms)
-- First-launch hints overlay (all features explained, shown once)
+- User quote with accent-colored left border
+- Quick access apps (up to 10, horizontal scroll, spring press feedback)
+- Swipe gestures (down→notifications panel, up→app drawer)
+- Category filters in app drawer (6 keyword categories: SOCIAL, MEDIA, WORK, GAMES, TOOLS, SHOP)
+- Headphone context shortcuts (music apps surface first when BT/wired connected)
+- Weather from wttr.in (auto-refresh 10min, placeholder "-- °C · ---" until loaded)
+- Rain effect (20 character drops when weather reports rain, toggle-able, 800ms fade-in)
+- Pixel pet — kaomoji face `(• ᴗ •)` with body, breathing animation, health system, 3 mood states
+- Reaction time game (long-press pet 600ms to trigger, shows best time)
+- Notification panel with quick-action tiles (WiFi, BT, NFC, GPS, Cast, DND, Display) + real notification list with dismiss
+- Crash logging (last 10 errors persisted) + error boundaries per screen
+- Settings: clock format (12/24h), all aesthetic toggles, gesture toggle, dock style, app/dock pickers
+- Staggered home screen mount cascade (clock→weather→quote→pet→apps→dock, 30ms gaps)
+- Touch feedback everywhere: gear rotation, quick app spring, pet long-press pulse, filter chip scale, dock item spring
+- Dock slide-up animation on every home focus return
+- Screen transitions: fade home (120ms), slide settings (150ms), slide drawer (100ms)
+- First-launch hints overlay (shown once, dismissable)
 - Settings GUIDE section (full feature reference)
-- "Show Welcome Hints" reset button in settings
+- "Show Welcome Hints" reset button
 - Pet hint text ("hold to play · health ↑ less screen time")
+- Typing cursor blink (500ms `_` after time)
+- Loading dots animation (terminal-style `· · ·`)
+- Typewriter empty state (30ms/char)
+- Auto-launch on boot (BootReceiver)
+- Back button disabled on home (true launcher behavior)
+- App install/uninstall listener (auto-refreshes app drawer)
+
+### ⚠️ Shipped But Broken / Incomplete
+- **Gesture toggle does nothing** — `gesturesEnabled` is saved in Settings but HomeScreen's PanResponder never checks it. Swipe always works regardless.
+- **`expandNotificationPanel()` deprecated** — native side rejects immediately. Notification panel works via navigation, but the old native method is dead code.
+- **Weather has no error handling for malformed responses** — if wttr.in returns unexpected format, the parser crashes silently.
+- **Pet health can briefly go negative** — race condition between `petHealthRef.current` and state propagation.
+
+### 🗑️ Dead Code (should remove)
+- `expandNotificationPanel()` in InstalledApps.ts — deprecated, unused
+- `openSoundSettings()` — exported, never called by any screen
+- `getConnectivityInfo()` — implemented natively, never called
+- `getBatteryLevel()` — superseded by `getBatteryInfo()`, never called
+- `openAppSettings(pkg)` and `uninstallApp(pkg)` — implemented but no UI triggers them (no long-press menu on apps)
+- `Typography` export in tokens.ts — never imported anywhere
+
+### 🔧 Technical Debt
+- `STORAGE_KEYS` duplicated identically in HomeScreen.tsx and SettingsScreen.tsx → should be shared module
+- Settings loading duplicated 3x in HomeScreen (mount, focus, separate function) → single reusable function
+- App deduplication logic copy-pasted in AppDrawerScreen and SettingsScreen
+- `NavItem` component duplicated in AppDrawerScreen and SettingsScreen
+- Launch animation (scale+opacity) duplicated in HomeScreen and AppDrawerScreen
+- All AsyncStorage errors silently swallowed with `catch(() => {})` → no logging
+- Glitch effect timeouts recreated every second (every time `time` state changes) → should be independent of time string
+- No accessibility labels on HomeScreen swipe area, pet, or quick apps
+- Module-level `cachedApps` in AppDrawerScreen isn't reactive to background changes
 
 ---
 
-## 🎯 New Differentiation Ideas
+## 🔴 What to REMOVE or REPLACE
 
-### 1. Sound & Haptics — "Feel the Interface"
-- **Typewriter haptics** — short vibration on every tap, like mechanical keyboard feedback
-- **Clock tick** — ultra-quiet tick sound every minute (optional, feels like a real instrument)
-- **Gesture haptic patterns** — different vibration shapes for swipe-up vs swipe-down vs launch
-- **Boot-up sequence** — brief haptic pulse pattern on launcher load (like a device powering on)
+### 1. Remove: Reaction Time Game
+**Why:** It's a gimmick hidden behind a long-press. Nobody discovers it. It doesn't fit the "tool, not a toy" philosophy. The pet is already borderline — the game pushes it into toy territory.
+**Replace with:** Make the long-press on pet show pet stats instead (health history, streak of low screen time days, mood log). Data > games.
 
-### 2. Temporal Awareness
-- **Sunrise/sunset line** — "☀ 06:12 · ☾ 18:47" — single glanceable line below weather
-- **Week progress bar** — secondary thin bar showing Mon→Sun progress
-- **Countdown widget** — "14d until deadline" — single user-set countdown
-- **Time-zone buddy** — "NYC 02:32 · Tokyo 15:32" — one line, for remote workers
-- **Moon phase indicator** — tiny dot that changes shape with lunar cycle (fits instrument aesthetic)
+### 2. Remove: ASCII Clock Mode
+**Why:** It looks cool in screenshots but is unreadable in daily use. The 5-line-tall block letters consume massive vertical space, pushing weather/quote/pet off screen. Nobody actually uses it as their daily clock.
+**Replace with:** Nothing. The standard clock with glitch + parallax + cursor is distinctive enough. Or if we want variety: a **compact** mode (smaller font, single-line time+date).
 
-### 3. Data Personality — "Your Phone Knows You"
-- **App launch streaks** — "📱 Day 12 of opening Duolingo first" (gamification through data)
-- **Daily app report** — end-of-day: "You used 6 apps today. Calmest day this week."
-- **Screen pickup counter** — "Picked up 23 times today" — subtle awareness nudge
-- **First app of the day** — track and display: "You always start with [X]"
-- **App drought alerts** — "You haven't opened [Meditation] in 9 days"
+### 3. Remove: Rain Effect (or drastically simplify)
+**Why:** 20 animated Text elements continuously running Animated.timing loops is expensive. On low-end Android devices, this tanks frame rate. The effect is also not that visible on a dark background.
+**Replace with:** A single subtle line of text below weather: `▒▒▒ rain ▒▒▒` that pulses. Zero performance cost, still communicates weather.
 
-### 4. Ritual & Intention
-- **Morning intention prompt** — on first unlock: quick text input "Today I will..."
-- **Evening reflection** — after 9pm: "How was today?" with 5-level dot scale
-- **Gratitude log** — once daily, optional: "One good thing:" — stored locally
-- **Weekly reset** — Sunday: shows week stats, clears intention, fresh start feeling
-- **"Did you mean to?"** — after 30+ minutes in a doom-scroll app, gentle banner on return
+### 4. Simplify: Quick Access Apps Row
+**Why:** 10 apps in a horizontal scroll is essentially a second app drawer. It defeats the purpose of a minimal launcher. Users who configure 10 quick apps have essentially recreated a normal grid launcher.
+**Replace with:** Max 5 apps (not 10). No scroll — they must all fit on screen. Forces intentional curation. The dock already has 4 apps + app drawer access.
 
-### 5. Ambient Data Display
-- **Background noise indicator** — subtle bar showing ambient dB level (mic, no recording)
-- **Compass heading** — tiny "N↑" or "SW↗" indicator, instrument-panel feel
-- **Altitude** — "124m" from barometer sensor — pure data, no purpose, pure aesthetic
-- **Acceleration sparkline** — tiny graph of phone movement last 10 seconds (like EKG)
-- **Local air quality** — from open API, single number: "AQI 42 · Good"
+### 5. Remove: Piano Dock
+**Why:** You already don't like it. It's clever but doesn't serve function better than the terminal dock. The alternating black/white heights create visual noise. The single-character display is cryptic.
+**Keep:** Terminal dock only. Remove `dockStyle` setting, PianoKey component, and all piano styles. Simplifies code by ~100 lines.
 
-### 6. Social Without Internet
-- **Shared quote of the day** — NFC tap between two Instrument users to exchange quotes
-- **Ghost presence** — show tiny dot when another Instrument user is nearby (BLE beacon)
-- **Config sharing** — NFC tap to copy someone's entire launcher config (colors, layout, apps)
-
-### 7. Deep Customization — "Make It Yours"
-- **Custom progress bar styles** — solid / dashed / dotted / gradient / pulse
-- **Clock font size slider** — from compact (24px) to massive (80px)
-- **Home screen density** — minimal (clock only) / standard / dense (clock+weather+quote+apps)
-- **Custom ASCII art** — user draws their own 5-line clock font characters
-- **Wallpaper tint** — pick from pure black / dark grain / subtle noise / gradient
-- **Monochrome mode** — all app icons converted to single-accent-color silhouettes
-- **Status bar hide** — true fullscreen mode, no clock/battery/signal in system bar
-
-### 8. Micro-Games & Fidgets
-- **Tap tempo** — tap the clock repeatedly to measure BPM (for musicians)
-- **Binary clock mode** — time displayed as binary dots (nerdy aesthetic)
-- **Reaction time test** — random moment: circle appears, tap it, see reaction time in ms
-- **Konami code easter egg** — specific gesture sequence unlocks hidden theme
-- **Pixel pet** — 8x8 pixel creature lives on home screen, "fed" by low screen time
-
-### 9. Intelligent Behavior
-- **Auto-sort by time-of-day** — morning apps rise to top at 6am, evening apps at 6pm
-- **Frequency learning** — app drawer reorders by your actual usage patterns
-- **Suggested removal** — after 14 days unused: "Remove [App]?" subtle suggestion
-- **Smart dock** — dock apps auto-swap based on weekday vs weekend patterns
-- **Context shortcuts** — if headphones plugged in, surface music apps first
-
-### 10. Visual Stunts (Shareable / Viral)
-- **Screenshot mode** — special beautiful layout for sharing launcher screenshots
-- **Boot animation** — ASCII art "INSTRUMENT" text draws itself character-by-character
-- **Idle patterns** — after 30s of no touch: subtle data visualization animations
-- **Typing cursor** — blinking underscore after the time, like a terminal waiting for input
-- **Rain effect** — when it's actually raining (from weather data), subtle droplet particles on screen
-- **Color of the day** — accent color auto-changes based on day of week (7 presets)
-
-### 11. Power User Features
-- **Tasker/Automate integration** — broadcast intents for automation
-- **Shortcut gestures** — map specific gestures to specific app launches
-- **App aliases** — rename apps in the drawer (e.g., "Chrome" → "WEB")
-- **Terminal mode** — type app names to launch them (like CLI)
-- **Batch operations** — select multiple apps to hide/categorize/pin at once
-- **Widget API** — let other apps push single-line text to the home screen
-
-### 12. Physical World Connection
-- **NFC tag launcher** — tap NFC tags to trigger different launcher profiles
-- **Wireless charging animation** — special ambient animation when on charging pad
-- **Dark/light auto** — switch accent color based on ambient light sensor
-- **Step-activated home** — after 100 steps, show a different motivational quote
+### 6. Rethink: First-Launch Hints Overlay
+**Why:** A wall of text on first launch is overwhelming. Nobody reads it. They dismiss immediately.
+**Replace with:** Progressive disclosure — show ONE hint at a time, contextually. E.g., after 3 seconds on home screen with no interaction: "swipe up for apps ↑". After first settings visit: "try changing the accent color". Drip-feed over first 3 days.
 
 ---
 
-## 📊 Updated Priority Matrix
+## 🟢 New Features — HIGH IMPACT
 
-| Impact | Effort | Feature | Status |
-|--------|--------|---------|--------|
-| High | Low | Haptic feedback patterns | ⏳ next |
-| High | Low | Breathing notification dot | ⏳ next |
-| High | Low | Typing cursor blink | ⏳ next |
-| High | Low | Morning intention prompt | ⏳ next |
-| High | Medium | App frequency learning | ⏳ next |
-| High | Medium | Focus mode (pause before launch) | ⏳ |
-| High | Medium | Screen pickup counter | ⏳ next |
-| High | Medium | Terminal mode (type to launch) | ⏳ |
-| Medium | Low | Sunrise/sunset line | ⏳ |
-| Medium | Low | Moon phase indicator | ⏳ |
-| Medium | Low | Week progress bar | ✅ done |
-| Medium | Low | Binary clock mode | ⏳ |
-| Medium | Low | Color of the day | ⏳ |
-| Medium | Medium | Evening reflection log | ⏳ |
-| Medium | Medium | Idle terminal patterns | ⏳ |
-| Medium | Medium | Rain weather effect | ✅ done |
-| Medium | Medium | Monochrome icon mode | ⏳ |
-| Medium | Medium | Smart dock (time-aware) | ⏳ |
-| Medium | High | Pixel pet | ✅ done |
-| Low | Low | Tap tempo BPM | ⏳ |
-| Low | Low | Konami code easter egg | ⏳ |
-| Low | Medium | Boot animation | ⏳ |
-| Low | Medium | Compass heading | ⏳ |
-| Low | High | NFC config sharing | ⏳ |
+### 1. ⚡ Haptic Feedback (Priority: CRITICAL)
+**What:** Short vibration on every meaningful interaction.
+**Why:** This is the #1 thing that makes a launcher feel "premium" vs "student project". Every competitor has it. Without haptics, taps feel hollow.
+**How:** New native module `HapticsModule` with 3 patterns:
+- `tick()` — 10ms vibration on any tap (dock, quick app, filter chip)
+- `impact()` — 25ms on app launch, gesture threshold cross
+- `pattern([10, 50, 10])` — double pulse on long-press recognition
+**Effort:** Low. One Kotlin file, one JS bridge. 2 hours max.
 
----
+### 2. 🔍 App Search on Home (Priority: HIGH)
+**What:** Tap the clock or pull down slightly → search field appears. Type to filter and launch any app instantly.
+**Why:** The #1 action on any launcher is "find and launch an app". Currently requires a full swipe up → wait for drawer → scroll/search. Too many steps.
+**How:** Reuse AppDrawer's search logic. Overlay a search bar + filtered result list (max 5 results) on top of home screen. Dismiss with back or empty query.
+**This is what Niagara does right.** It's the killer feature of minimal launchers.
 
-## 💡 Positioning Statement
+### 3. 📊 Screen Time Tracker (Priority: HIGH)
+**What:** Track daily screen time per app. Show a single number on home: "2h 14m today". Tap to see breakdown.
+**Why:** Fits the "your phone is a tool" philosophy perfectly. No other minimal launcher does this natively. Android's built-in Digital Wellbeing is buried in settings.
+**How:** Native module using `UsageStatsManager` (requires `PACKAGE_USAGE_STATS` permission). Store daily totals in AsyncStorage. Show on home screen below progress bars.
+**Effort:** Medium. Native module + UI + permission flow.
 
-> "The launcher for people who want their phone to be a tool, not a slot machine."
+### 4. 🌅 Sunrise/Sunset Line (Priority: MEDIUM)
+**What:** Single line below weather: `☀ 06:12 · ☾ 18:47`
+**Why:** Glanceable, useful, unique. Calculated offline from lat/long (no API needed). Adds temporal richness without clutter.
+**How:** Solar calculation algorithm (it's just math — no API). Get rough location from timezone offset or request coarse location once.
+**Effort:** Low. Pure JS calculation + one Text element.
 
-**Key differentiators vs competition (Niagara, Olauncher, Before):**
-1. Progress bar showing day completion — unique visual
-2. Aesthetic uniqueness: glitch/parallax/ASCII — no other launcher does this
-3. Zero telemetry, no internet except opt-in weather
-4. Terminal/instrument aesthetic (not just "minimal")
-5. Intentional friction for addictive apps (future)
-6. Data personality — phone tells you about your habits
-7. Ritual features — morning intention, evening reflection
+### 5. 📝 Morning Intention (Priority: MEDIUM-HIGH)
+**What:** On first unlock each day: small input field "Today I will..." that persists as a single line on home screen.
+**Why:** This is the feature that makes people post screenshots. It turns the launcher into a daily ritual. Unique differentiator.
+**How:** Detect first unlock via AppState `active` event + date comparison. Store in AsyncStorage with date key. Display below quote.
+**Effort:** Low.
 
----
+### 6. 🔢 Screen Pickup Counter (Priority: MEDIUM)
+**What:** Small text on home: "↑ 14 pickups"
+**Why:** Awareness nudge. Simple, powerful, fits instrument-panel aesthetic. Pairs with screen time tracker.
+**How:** Count `AppState` transitions from `background` → `active`. Reset daily.
+**Effort:** Trivial.
 
-## 🚀 Suggested Next Sprint (v1.2)
+### 7. 🎨 Color of the Day (Priority: LOW-MEDIUM)
+**What:** Accent color auto-cycles through 7 colors, one per day of the week.
+**Why:** Free "freshness" — the home screen looks slightly different every day without user effort. Makes people check which color today is.
+**How:** `new Date().getDay()` → index into a 7-color array. Override manual accent when enabled.
+**Effort:** Trivial.
 
-**Theme: "Make it feel alive"**
+### 8. 📲 Long-Press App Menu (Priority: MEDIUM)
+**What:** Long-press any app in drawer → options: App Info, Uninstall, Add to Quick Access, Add to Dock.
+**Why:** The native methods `openAppSettings` and `uninstallApp` already exist but have no UI. This unlocks them. Every launcher has this.
+**How:** Simple modal/bottom sheet on long-press. The native bridge already exists.
+**Effort:** Low.
 
-1. Haptic feedback — vibration on dock/gesture/launch (native module)
-2. Breathing notification dot — pulsing dot replaces badge count
-3. Typing cursor blink — blinking `_` after the time display
-4. Morning intention prompt — first unlock shows input field
-5. Screen pickup counter — subtle "23 pickups" on home screen
-6. Frequency learning — auto-sort drawer by usage
+### 9. ⌨️ Terminal Mode (Priority: HIGH — VIRAL)
+**What:** Tap the typing cursor `_` on the clock → terminal input appears. Type app name → instant launch. Type commands like `time`, `battery`, `weather` for quick info.
+**Why:** THIS is the feature that gets shared on Reddit/Twitter. "My launcher has a command line." It perfectly embodies the instrument aesthetic. No other launcher does this.
+**How:** TextInput overlay on home screen. Fuzzy match against app names (first 3 chars). Built-in commands: `help`, `time`, `battery`, `weather`, `quote [text]`, `accent [color]`.
+**Effort:** Medium.
 
-**Theme: "Viral / Shareable moments"**
-
-7. Boot animation — ASCII "INSTRUMENT" draws itself
-8. ~~Rain effect — particles when weather reports rain~~ ✅
-9. Color of the day — auto-cycling accent color
-10. Screenshot mode — beautiful layout for sharing
-
-**Already shipped from this sprint:**
-- ✅ Rain effect (with toggle)
-- ✅ Pixel pet (health system + reaction game)
-- ✅ Week progress bar (labeled)
-- ✅ Piano dock (replaces box dock)
-- ✅ Staggered animations + touch feedback
-- ✅ Feature discoverability (hints overlay + settings guide + inline labels)
-- ✅ Headphone context shortcuts
-- ✅ AppDrawer blank screen fix
+### 10. 🔕 Focus Mode (Priority: HIGH)
+**What:** Before launching certain apps (user-configured "focus list"), show a 3-second pause screen: "Opening Instagram. Intentional?" with a breathing dot. User can cancel or proceed.
+**Why:** This is the anti-addiction feature. It's the core of the "tool, not a slot machine" philosophy. Before Launcher does something similar and people love it.
+**How:** Intercept `launchApp()` calls. Check against a "focus apps" list in AsyncStorage. Show a modal with a countdown. Store daily "paused and cancelled" count.
+**Effort:** Medium.
 
 ---
 
-## 🎬 Animation & Micro-Interaction Audit
+## 🟡 New Features — MEDIUM IMPACT
 
-> **Goal:** Every touch must feel instant. Every transition must feel intentional. Nothing should feel "stuck", "dead", or "did it register?"
+### 11. App Usage Frequency Sort
+**What:** App drawer auto-reorders by how often you launch each app. Most-used at top.
+**How:** Increment a counter in AsyncStorage on each `launchApp()`. Sort the drawer by count (descending). Add a "Recent" filter alongside SOCIAL/MEDIA/etc.
+**Effort:** Low.
 
-### Current State (what we have)
+### 12. Compact Home Layout
+**What:** Settings option for "Minimal" layout that shows ONLY: clock + one progress bar + dock. No weather, no quote, no pet, no quick apps.
+**Why:** Some users want absolute minimalism. Currently you can disable pet, but weather/quote/quick-apps are always there.
+**Effort:** Low (conditional rendering based on a layout enum).
 
-| Where | What | Duration | Status |
-|-------|------|----------|--------|
-| Home mount | Staggered cascade (clock→weather→quote→pet→apps→dock) | 150ms/item, 30ms gaps | ✅ Implemented |
-| App launch | Scale 1→1.04 + fade-out | 150ms | ✅ Good |
-| Piano key press | Spring scale 0.95 + label reveal | ~200ms | ✅ Good |
-| Navigation → AppDrawer | slide_from_bottom | 100ms | ✅ Good |
-| Navigation → Settings | slide_from_right | 150ms | ✅ Fixed |
-| Navigation → Home (back) | Fade | 120ms | ✅ Fixed (was 'none') |
-| Rain drops | Continuous fall loop | 2-4s per cycle | ✅ Working |
-| Glitch text | Random char swap | 80ms flash | ✅ Good |
-| Parallax clock | Spring on gyro | Continuous | ✅ Good |
-| Pet idle | Smooth sinusoidal breathing (scale 1→1.02→1) | 2s cycle | ✅ Implemented |
-| Settings gear | Rotate 90° on press, spring back | ~200ms | ✅ Implemented |
-| Quick app tap | Scale 0.88→1 spring | ~200ms | ✅ Implemented |
-| Pet long-press | Pulse scale 1→1.06 during hold | 300ms loop | ✅ Implemented |
-| Dock re-entry | Slide up from bottom on every focus | Spring | ✅ Implemented |
-| Progress bars | DAY/WK labels + percentage | — | ✅ Labeled |
-| Pet hint | "hold to play" text | — | ✅ Discoverable |
-| First-launch hints | Full-screen guide overlay | — | ✅ Implemented |
-| Typing cursor | Blinking _ after time (500ms cycle) | 500ms | ✅ Implemented |
-| Rain fade-in | Gradual opacity 0→1 on mount | 800ms | ✅ Implemented |
-| Swipe preview | Content follows finger proportionally | Spring | ✅ Implemented |
-| Weather placeholder | Shows "-- °C · ---" until data loads | — | ✅ Implemented |
-| App drawer stagger | First 8 items slide-in 20ms apart | 150ms/item | ✅ Implemented |
-| Loading dots | Terminal-style "· · ·" animation | 300ms | ✅ Implemented |
-| Empty typewriter | Chars appear 30ms at a time | 30ms/char | ✅ Implemented |
-| Filter chip press | Scale 0.9 spring on press | ~80ms | ✅ Implemented |
+### 13. Custom Dock Labels
+**What:** Let users rename dock labels (e.g., "Chrome" → "WEB", "Gmail" → "MAIL").
+**Why:** Fits the instrument aesthetic. Short, intentional labels. Users already see auto-truncated labels but can't control them.
+**Effort:** Trivial.
 
-### Where Animation Is Missing (Dead Zones)
+### 14. Notification Badge Dot
+**What:** Tiny pulsing dot on dock items that have pending notifications.
+**How:** Cross-reference `getNotifications()` package names with dock app packages. Show a 4px accent-colored dot above the label.
+**Effort:** Low.
 
-#### 1. Touch Acknowledgement (CRITICAL — "did my tap register?")
-- **Quick app tap** — no feedback at all. Add: scale 0.92→1 spring (60ms). User must feel the press instantly.
-- **Settings gear tap** — no feedback. Add: rotate 45° on press, spring back on release.
-- **Quote area** — static. Consider subtle parallax or very slight fade-in on mount.
-- **Category filter pills (App Drawer)** — likely no press animation. Add: background fill animates left→right like a loading bar (100ms).
-- **Search icon tap** — needs scale pulse or underline expansion.
+### 15. Weekly Stats Card
+**What:** Every Sunday: "This week: 23h screen time · 142 pickups · Most used: Chrome". Shown as a card that dismisses.
+**Why:** Weekly reflection. Data personality feature.
+**Effort:** Medium (requires screen time tracking from #3).
 
-#### 2. Screen Transitions
-- **Home → AppDrawer (swipe up)** — currently `slide_from_bottom` at 100ms. Good speed but feels generic.
-  - **Upgrade:** Content should cascade-in — search bar slides from top, app list fades staggered (each row 30ms apart). Makes it feel "alive" not "popped in".
-- **Home → Settings** — `slide_from_right`, default duration (~300ms). Feels sluggish.
-  - **Fix:** Drop to 150ms. Add a subtle parallax push on the Home screen (slides left slightly as Settings enters from right).
-- **Back to Home (from any screen)** — `animation: 'none'`. This is jarring.
-  - **Upgrade:** Fade-in at 100-150ms. "None" makes it feel like a crash recovery, not a deliberate return.
-- **Home → Notifications (swipe down)** — needs matching speed. Should mirror AppDrawer timing (100ms, slide_from_top).
+### 16. Double-Tap Clock for Alarm
+**What:** Double-tap the clock → opens the default alarm/clock app.
+**Why:** Natural gesture. Clock → alarm is the most obvious affordance.
+**Effort:** Trivial (detect double-tap, launch `com.google.android.deskclock` or equivalent).
 
-#### 3. Content Mount Animations (Stagger > Simultaneous)
-- **Home screen first load** — currently everything fades in at once (single 400ms fade). It's flat.
-  - **Upgrade:** Staggered cascade:
-    - 0ms: Clock fades in
-    - 80ms: Progress bars wipe left→right
-    - 150ms: Date text fades
-    - 200ms: Weather slides in from left
-    - 280ms: Quote fades in
-    - 350ms: Pet fades in
-    - 400ms: Piano dock slides up from bottom
-  - Each element: 150ms fade + 8px translateY. Total sequence: ~500ms but feels faster because things appear progressively.
-- **App Drawer list** — currently all apps render at once. Large lists feel like a "dump".
-  - **Upgrade:** First 8 visible items stagger-in (20ms apart, translateX: 12→0 + opacity 0→1). Rest are instant (off-screen, no wasted animation).
-- **Settings sections** — static render. Add stagger on each section block (30ms apart, opacity fade).
+### 17. Swipe Left/Right on Quick Apps
+**What:** Horizontal swipe on a quick app to remove it (like iOS notification dismiss). Confirms with a brief "Removed" toast.
+**Why:** Currently the only way to manage quick apps is through Settings → App Picker. This is faster.
+**Effort:** Low.
 
-#### 4. State Change Animations
-- **Clock format change (12↔24)** — text just snaps. Add: crossfade (old fades out 80ms, new fades in 80ms, slight Y shift).
-- **Accent color change** — all colored elements snap to new color. Add: 200ms color transition on progress bar, quote border, pet highlight.
-- **Toggle switches (Settings)** — standard RN Switch, no custom feel. Consider: custom toggle with sliding dot + track color fade.
-- **Pet mood change** — ASCII art just replaces. Add: brief "glitch" flash (40ms of random chars) before new mood renders. Fits the aesthetic.
-- **Pet health change** — health bar width snaps. Add: `Animated.spring` on width for smooth fill/drain.
-- **Weather update** — text just replaces. Add: old text fades out left, new text fades in from right (150ms).
-- **Rain start/stop** — drops appear/disappear instantly. Add: rain opacity fades in over 800ms (gradual onset). Fade out over 400ms when stops.
+---
 
-#### 5. Gesture Feedback
-- **Swipe up (to AppDrawer)** — gesture is detected at 80px threshold but has no visual preview.
-  - **Upgrade:** As finger drags up, dock slides down proportionally + slight opacity decrease. Gives "pulling a drawer open" feeling. If cancelled, dock springs back.
-- **Swipe down (to Notifications)** — same issue, no preview.
-  - **Upgrade:** As finger drags down, content slides down slightly, a thin line appears at top. Release completes or cancels with spring.
-- **Long press on pet → Reaction game** — 600ms delay with zero visual indication.
-  - **Fix:** Pet should pulse/vibrate (scale oscillation) during the long press. At 600ms it "pops" into the game. User knows their press is registering.
+## 🔵 New Features — BOLD / EXPERIMENTAL
 
-#### 6. Piano Dock Specifics
-- **Key idle state** — currently static. Add: very subtle breathing opacity on the single character (opacity 0.3↔0.5, 3s cycle, each key offset). Keys feel "alive".
-- **Key press → app launch** — label appears, scale animates, app launches. But there's no visual "release" after launch.
-  - **Add:** After launch animation fires, the pressed key briefly flashes accent color on its top border (100ms), then the whole dock fades out with the launch animation.
-- **Dock re-entry (coming back to Home)** — dock should slide up from bottom (200ms spring) on every focus, not just first mount. Reinforces the piano metaphor of "keys rising into position".
+### 18. Ghost Mode
+**What:** Triple-tap the background → all widgets disappear except a tiny dot. Tap the dot → everything returns with a fade. Home screen becomes pure black.
+**Why:** Ultimate minimalism. Shareable "look how clean my phone is" moment. Also useful in meetings/dark rooms.
+**Effort:** Low (animate opacity of all elements to 0, show single dot).
 
-#### 7. Loading & Empty States
-- **"Loading apps..." in drawer** — plain text. Add: three-dot pulse animation `·  · ·` → `· ·  ·` → `·  · ·` (terminal-style).
-- **Empty search results** — static "No apps found". Add: text types itself character-by-character (typewriter, 30ms/char).
-- **Weather loading** — nothing shown until data arrives. Add: placeholder `-- °C · ---` that "flips" into real data when loaded (split-flap style).
+### 19. Daily Color Shift
+**What:** Accent color slowly shifts hue over 24 hours. Morning: warm (orange/yellow). Afternoon: cool (blue/teal). Night: purple/white.
+**Why:** The home screen literally tells you the time of day through color. Ambient temporal awareness.
+**Effort:** Low (HSL interpolation based on hour).
 
-#### 8. Scroll Behavior
-- **Quick apps horizontal scroll** — standard scroll, no snap. Add: snap-to-item behavior + subtle scale on center item (1.05x) to show focus.
-- **App drawer vertical scroll** — standard. Add: overscroll rubber-band effect (already native on iOS, verify on Android). Items at scroll edges could have slight opacity fade (parallax depth hint).
-- **Settings scroll** — standard. Fine as-is, settings don't need flair.
+### 20. Data Dashboard Mode
+**What:** Long-press the progress bar → expands into a full-screen dashboard: screen time graph (7 days), pickup count graph, app usage pie chart, pet health timeline.
+**Why:** Power user feature. Turns the launcher into a personal analytics tool.
+**Effort:** High (charts, data persistence, UI).
 
-#### 9. Ambient / Idle Animations
-- **Typing cursor** — (from brainstorm) blinking `_` after time. This is free "aliveness" — 500ms on/off cycle. Implement in ClockWidget.
-- **Progress bar pulse** — day/week bars are static once rendered. Add: at exactly midnight, the bar resets with a satisfying wipe animation (accent color sweeps right→left, then bar starts from 0).
-- **Pet breathing** — current opacity toggle is too crude. Replace with: smooth sinusoidal scale (1.0→1.02→1.0, 2s cycle). Barely noticeable but subconsciously "alive".
+### 21. Shared Config via QR
+**What:** Settings → "Share Config" generates a QR code encoding all settings (accent color, dock apps, layout, toggles). Another user scans it to apply.
+**Why:** Viral mechanic. "Scan my launcher setup." Reddit/Discord communities would share configs.
+**Effort:** Medium (QR generation library + config serialization).
 
-### Animation Rules (Design System)
+### 22. Weather Mood
+**What:** Instead of "23°C · Partly Cloudy", show a single emoji-style line: `◐ 23° light`. Or even just: `23° ░░░`. The weather affects the background texture subtly (grain increases when cloudy).
+**Why:** Current weather display is generic. This makes it feel native to the aesthetic.
+**Effort:** Low.
 
-| Type | Duration | Easing | When |
-|------|----------|--------|------|
-| Touch feedback | 40-80ms | Spring (friction 8) | Every tappable element |
-| Screen transition | 100-200ms | ease-out | Navigation |
-| Content mount | 150ms per item, 30-80ms stagger | ease-out | Screen load |
-| State change | 150-200ms | ease-in-out | Data updates |
-| Ambient/idle | 2000-4000ms | sinusoidal | Always running |
-| Exit/dismiss | 80-120ms | ease-in (fast out) | Closing/leaving |
+---
 
-### Golden Rules
-1. **< 100ms = instant.** Touch feedback must be under 100ms. No exceptions.
-2. **Spring > timing.** Springs feel physical. Timing feels digital. Default to spring.
-3. **Stagger > simultaneous.** 5 things appearing one-by-one at 30ms gaps feels faster than 5 things appearing at once.
-4. **Exit faster than enter.** Dismiss at 60-70% of enter duration. Leaving should never feel slow.
-5. **useNativeDriver: true.** Every animation. No JS thread animations for transforms/opacity.
-6. **Cancel gracefully.** Interrupted gestures must spring back, never snap.
-7. **Animate what changed, not everything.** If only the temperature updated, only the temperature animates.
+## 🏗️ Architecture Improvements
 
-### Priority Implementation Order
+### 1. Shared Constants Module
+Extract `STORAGE_KEYS`, `DEFAULT_DOCK`, `ACCENT_COLORS`, `DEFAULT_ACCENT` into `src/constants.ts`. Both screens import from one source.
 
-| Priority | Animation | Impact | Effort | Status |
-|----------|-----------|--------|--------|--------|
-| P0 | Touch feedback on all tappables | Huge — removes "dead" feeling | Low | ✅ Done |
-| P0 | Staggered home screen mount | Huge — first impression | Medium | ✅ Done |
-| P0 | Back-to-Home fade (replace `none`) | High — removes jarring snap | Trivial | ✅ Done |
-| P1 | Long-press visual indicator on pet | High — removes "is it working?" | Low | ✅ Done |
-| P1 | Piano dock slide-up on focus | Medium — reinforces metaphor | Low | ✅ Done |
-| P1 | Swipe gesture preview (proportional drag) | High — gesture feels connected | Medium | ✅ Done |
-| P1 | Settings transition speed fix | Medium — removes sluggishness | Trivial | ✅ Done |
-| P2 | App drawer staggered list | Medium — polish | Medium | ✅ Done |
-| P2 | Rain fade-in/out | Low — subtlety | Low | ✅ Done |
-| P2 | Pet smooth breathing | Low — ambient life | Low | ✅ Done |
-| P2 | Typing cursor blink | Low — free aliveness | Trivial | ✅ Done |
-| P3 | Loading state animations | Low — edge case | Low | ✅ Done |
-| P3 | Weather placeholder flip | Low — polish | Medium | ✅ Done |
-| P3 | Progress bar midnight reset | Low — rare event | Low | ⏳ |
+### 2. Custom Hooks
+- `useSettings()` — single hook that loads/saves all settings, returns state + setters. Eliminates the 3x duplication in HomeScreen.
+- `useLaunchAnimation()` — shared launch animation logic (currently duplicated in Home + AppDrawer).
+- `useAppList()` — shared app loading + deduplication + caching.
+
+### 3. Shared Components
+- `NavItem` — used in AppDrawer and Settings, currently duplicated.
+- `AppRow` — app list item, currently different in drawer vs settings picker.
+
+### 4. Fix the Gesture Toggle
+HomeScreen's PanResponder should check `gesturesEnabled` state. Currently the setting exists but does nothing.
+
+### 5. Weather Error Handling
+Wrap the wttr.in response parser in try/catch with fallback to cached data.
+
+### 6. Decouple Glitch from Clock Tick
+The glitch `useEffect` depends on `[time]`, causing recreation every second. Refactor to use a ref for the current time string and make the glitch schedule independent.
+
+---
+
+## 📊 Revised Priority Matrix
+
+| Priority | Feature | Impact | Effort | Category |
+|----------|---------|--------|--------|----------|
+| 🔴 P0 | Haptic feedback | Huge | Low | Polish |
+| 🔴 P0 | Fix gesture toggle bug | High | Trivial | Bugfix |
+| 🔴 P0 | Remove dead code | Medium | Trivial | Cleanup |
+| 🟠 P1 | Home screen app search | Huge | Medium | Core UX |
+| 🟠 P1 | Focus mode (pause before launch) | Huge | Medium | Differentiation |
+| 🟠 P1 | Terminal mode (type to launch) | Huge | Medium | Viral/Identity |
+| 🟠 P1 | Long-press app menu | High | Low | Basic UX |
+| 🟠 P1 | Screen time tracker | High | Medium | Differentiation |
+| 🟡 P2 | Morning intention prompt | Medium | Low | Ritual |
+| 🟡 P2 | Screen pickup counter | Medium | Trivial | Awareness |
+| 🟡 P2 | Sunrise/sunset line | Medium | Low | Temporal |
+| 🟡 P2 | App usage frequency sort | Medium | Low | Intelligence |
+| 🟡 P2 | Notification badge dot | Medium | Low | Utility |
+| 🟡 P2 | Progressive hints (replace wall-of-text) | Medium | Medium | Onboarding |
+| 🟢 P3 | Color of the day | Low | Trivial | Delight |
+| 🟢 P3 | Custom dock labels | Low | Trivial | Customization |
+| 🟢 P3 | Double-tap clock for alarm | Low | Trivial | Utility |
+| 🟢 P3 | Compact home layout | Low | Low | Customization |
+| 🟢 P3 | Weekly stats card | Low | Medium | Data personality |
+| 🔵 P4 | Ghost mode | Low | Low | Experimental |
+| 🔵 P4 | Daily color shift | Low | Low | Experimental |
+| 🔵 P4 | Data dashboard | Low | High | Power user |
+| 🔵 P4 | QR config sharing | Low | Medium | Viral |
+
+---
+
+## 🗺️ Suggested Roadmap
+
+### v1.2 — "Make it real" (Polish + Bugs)
+1. Haptic feedback (native module)
+2. Fix gesture toggle
+3. Remove dead code
+4. Shared constants + hooks refactor
+5. Remove piano dock (terminal only)
+6. Cap quick apps at 5
+7. Fix weather error handling
+
+### v1.3 — "The killer features"
+1. Home screen search (tap clock or pull down)
+2. Terminal mode (tap cursor `_`)
+3. Long-press app menu
+4. Focus mode for addictive apps
+
+### v1.4 — "Know yourself"
+1. Screen time tracker
+2. Screen pickup counter
+3. App usage frequency sort
+4. Weekly stats card
+5. Morning intention prompt
+
+### v1.5 — "Ambient intelligence"
+1. Sunrise/sunset line
+2. Notification badge dots
+3. Color of the day
+4. Daily color shift
+5. Progressive onboarding hints
+
+### v2.0 — "Share it"
+1. QR config sharing
+2. Ghost mode
+3. Data dashboard
+4. Screenshot mode (beautiful shareable layout)
+
+---
+
+## 💡 Revised Positioning
+
+> "The launcher that treats your phone like an instrument panel — every pixel shows data, every interaction is intentional, every distraction has a speed bump."
+
+**What makes INSTRUMENT different from every other minimal launcher:**
+
+| Feature | Niagara | Olauncher | Before | **INSTRUMENT** |
+|---------|---------|-----------|--------|----------------|
+| App search | ✅ Alphabet sidebar | ❌ | ❌ | ✅ Terminal mode |
+| Anti-addiction | ❌ | ❌ | ✅ Basic | ✅ Focus mode + screen time |
+| Data display | ❌ | ❌ | ❌ | ✅ Progress bars + pickups + time |
+| Weather | ❌ | ❌ | ❌ | ✅ Integrated |
+| Customization | Low | None | Low | ✅ High (colors, docks, layouts) |
+| Aesthetic identity | Clean | Bare | Soft | **Terminal/instrument** |
+| Haptics | ❌ | ❌ | ❌ | ✅ Everywhere |
+| Ritual features | ❌ | ❌ | ❌ | ✅ Intention + reflection |
+
+---
+
+## 🎬 Updated Animation Audit Status
+
+All P0-P2 animations are shipped. Only remaining:
+- P3: Progress bar midnight reset (low priority, rare edge case)
+
+New animations needed for new features:
+- Search overlay: slide down from clock position, 100ms
+- Terminal mode: typewriter input, results fade in 30ms stagger
+- Focus mode pause: breathing dot scale 1→1.1, 2s loop
+- Screen time number: count-up animation on mount
+- Notification dot: slow pulse opacity 0.4→1→0.4, 3s cycle
