@@ -20,6 +20,7 @@ import {
   AppInfo,
   InstalledAppsEvents,
 } from '../native/InstalledApps';
+import {isHeadphonesConnected} from '../native/DeviceInfo';
 import {APP_ICON_MAP} from '../components/AppIcons';
 
 // Module-level cache so apps persist between navigations
@@ -34,6 +35,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const [searchVisible, setSearchVisible] = useState(false);
   const [apps, setApps] = useState<AppInfo[]>(cachedApps);
   const [loading, setLoading] = useState(cachedApps.length === 0);
+  const [headphonesConnected, setHeadphonesConnected] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
   // Launch animation
   const launchScale = useRef(new Animated.Value(1)).current;
@@ -41,6 +43,8 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   useEffect(() => {
     loadApps();
+    // Check headphone status
+    isHeadphonesConnected().then(setHeadphonesConnected).catch(() => {});
     // Listen for app install/uninstall
     const sub = InstalledAppsEvents.addListener('onAppsChanged', () => {
       cachedApps = [];
@@ -104,25 +108,46 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     {label: 'SHOP', keywords: ['amazon', 'flipkart', 'shopping', 'store', 'pay', 'wallet', 'bank', 'money', 'gpay', 'phonepe', 'paytm']},
   ];
 
-  const filteredApps = apps.filter(app => {
-    const name = app.name.toLowerCase();
-    const pkg = app.packageName.toLowerCase();
-    
-    // Text search filter
-    if (searchQuery && !name.includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    
-    // Category filter
-    if (activeFilter) {
-      const category = APP_CATEGORIES.find(c => c.label === activeFilter);
-      if (category) {
-        return category.keywords.some(kw => name.includes(kw) || pkg.includes(kw));
+  const MUSIC_KEYWORDS = ['music', 'spotify', 'player', 'podcast', 'audio', 'sound', 'radio', 'youtube music', 'gaana', 'wynk', 'jiosaavn'];
+
+  const filteredApps = (() => {
+    let result = apps.filter(app => {
+      const name = app.name.toLowerCase();
+      const pkg = app.packageName.toLowerCase();
+      
+      // Text search filter
+      if (searchQuery && !name.includes(searchQuery.toLowerCase())) {
+        return false;
       }
+      
+      // Category filter
+      if (activeFilter) {
+        const category = APP_CATEGORIES.find(c => c.label === activeFilter);
+        if (category) {
+          return category.keywords.some(kw => name.includes(kw) || pkg.includes(kw));
+        }
+      }
+      
+      return true;
+    });
+
+    // Context shortcut: surface music apps first when headphones connected
+    if (headphonesConnected && !searchQuery && !activeFilter) {
+      const musicApps = result.filter(app => {
+        const name = app.name.toLowerCase();
+        const pkg = app.packageName.toLowerCase();
+        return MUSIC_KEYWORDS.some(kw => name.includes(kw) || pkg.includes(kw));
+      });
+      const otherApps = result.filter(app => {
+        const name = app.name.toLowerCase();
+        const pkg = app.packageName.toLowerCase();
+        return !MUSIC_KEYWORDS.some(kw => name.includes(kw) || pkg.includes(kw));
+      });
+      result = [...musicApps, ...otherApps];
     }
-    
-    return true;
-  });
+
+    return result;
+  })();
 
   const handleLaunch = useCallback(async (packageName: string) => {
     Animated.parallel([
@@ -205,7 +230,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
       {/* App count */}
       <Text style={styles.appCount}>
-        {loading ? 'Loading...' : `${filteredApps.length} ${filteredApps.length === 1 ? 'APP' : 'APPS'}`}
+        {loading ? 'Loading...' : `${filteredApps.length} ${filteredApps.length === 1 ? 'APP' : 'APPS'}${headphonesConnected ? ' · 🎧' : ''}`}
       </Text>
 
       {/* App List */}

@@ -2,6 +2,7 @@ package com.instrument.launcher
 
 import android.content.Intent
 import android.os.BatteryManager
+import android.media.AudioManager
 import android.net.wifi.WifiManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -232,5 +233,23 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun removeListeners(count: Int) {
         // No-op: Required for RN NativeEventEmitter
+    }
+
+    @ReactMethod
+    fun isHeadphonesConnected(promise: Promise) {
+        try {
+            val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val hasHeadphones = devices.any { device ->
+                device.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                device.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                device.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET
+            }
+            promise.resolve(hasHeadphones)
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
     }
 }

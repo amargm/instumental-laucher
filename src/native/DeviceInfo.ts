@@ -104,3 +104,9 @@ export async function openCastSettings(): Promise<boolean> {
 // ─── Event Emitter for notification changes ──────────────
 
 export const DeviceInfoEvents = new NativeEventEmitter(DeviceInfo);
+
+// ─── Audio ───────────────────────────────────────────────
+
+export async function isHeadphonesConnected(): Promise<boolean> {
+  return DeviceInfo.isHeadphonesConnected();
+}

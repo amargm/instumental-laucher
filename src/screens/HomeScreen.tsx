@@ -9,6 +9,8 @@ import {
   PanResponder,
   ScrollView,
   Animated,
+  Dimensions,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -26,6 +28,8 @@ import {
 } from '../components/AppIcons';
 import {APP_ICON_MAP} from '../components/AppIcons';
 
+const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
+
 const STORAGE_KEYS = {
   clockFormat: '@settings_clock_format',
   quote: '@settings_quote',
@@ -35,6 +39,9 @@ const STORAGE_KEYS = {
   glitchEnabled: '@settings_glitch_enabled',
   parallaxEnabled: '@settings_parallax_enabled',
   asciiClockEnabled: '@settings_ascii_clock_enabled',
+  petHealth: '@pet_health',
+  petLastFed: '@pet_last_fed',
+  reactionBest: '@reaction_best_time',
 };
 
 const DEFAULT_DOCK: {pkg: string; label: string}[] = [
@@ -77,12 +84,200 @@ const renderAsciiTime = (timeStr: string): string => {
   return lines.join('\n');
 };
 
+// ─── Rain Effect Component ───
+const RAIN_CHARS = ['·', ':', '.', '|', '¦'];
+const NUM_DROPS = 20;
+
+const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string}) => {
+  const fallAnim = useRef(new Animated.Value(-20)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const x = useRef(Math.random() * SCREEN_WIDTH).current;
+
+  useEffect(() => {
+    const startDrop = () => {
+      fallAnim.setValue(-20);
+      opacity.setValue(0.3 + Math.random() * 0.4);
+      Animated.timing(fallAnim, {
+        toValue: SCREEN_HEIGHT,
+        duration: 2000 + Math.random() * 2000,
+        useNativeDriver: true,
+      }).start(() => startDrop());
+    };
+    const timeout = setTimeout(startDrop, delay);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  const char = RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)];
+
+  return (
+    <Animated.Text
+      style={[
+        styles.rainDrop,
+        {left: x, opacity, transform: [{translateY: fallAnim}], color: accentColor},
+      ]}
+      pointerEvents="none">
+      {char}
+    </Animated.Text>
+  );
+});
+
+const RainEffect = memo(({accentColor}: {accentColor: string}) => (
+  <View style={styles.rainContainer} pointerEvents="none">
+    {Array.from({length: NUM_DROPS}, (_, i) => (
+      <RainDrop key={i} delay={i * 200} accentColor={accentColor} />
+    ))}
+  </View>
+));
+
+// ─── Pixel Pet Component (8x8 grid creature) ───
+const PET_FRAMES = {
+  happy: [
+    '  ████  ',
+    ' █░░░░█ ',
+    '█░●░░●░█',
+    '█░░░░░░█',
+    '█░░▀▀░░█',
+    ' █░░░░█ ',
+    '  ████  ',
+    '  █  █  ',
+  ],
+  neutral: [
+    '  ████  ',
+    ' █░░░░█ ',
+    '█░●░░●░█',
+    '█░░░░░░█',
+    '█░░──░░█',
+    ' █░░░░█ ',
+    '  ████  ',
+    '  █  █  ',
+  ],
+  sad: [
+    '  ████  ',
+    ' █░░░░█ ',
+    '█░●░░●░█',
+    '█░░░░░░█',
+    '█░░▄▄░░█',
+    ' █░░░░█ ',
+    '  ████  ',
+    '  █  █  ',
+  ],
+};
+
+const PixelPet = memo(({health, accentColor}: {health: number; accentColor: string}) => {
+  const [frame, setFrame] = useState(0);
+  const mood = health > 70 ? 'happy' : health > 30 ? 'neutral' : 'sad';
+  const petArt = PET_FRAMES[mood];
+
+  // Subtle idle animation (toggle between frames)
+  useEffect(() => {
+    const interval = setInterval(() => setFrame(f => (f + 1) % 2), 1500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View style={styles.petContainer}>
+      <Text style={[styles.petArt, {color: accentColor, opacity: frame === 0 ? 1 : 0.85}]}>
+        {petArt.join('\n')}
+      </Text>
+      <View style={styles.petHealthBar}>
+        <View style={[styles.petHealthFill, {width: `${health}%`, backgroundColor: accentColor}]} />
+      </View>
+      <Text style={styles.petLabel}>PET · {health}%</Text>
+    </View>
+  );
+});
+
+// ─── Reaction Time Game ───
+const ReactionTimeGame = memo(({onClose, accentColor}: {onClose: () => void; accentColor: string}) => {
+  const [phase, setPhase] = useState<'waiting' | 'ready' | 'go' | 'result' | 'early'>('waiting');
+  const [startTime, setStartTime] = useState(0);
+  const [reactionTime, setReactionTime] = useState(0);
+  const [bestTime, setBestTime] = useState(0);
+  const timerRef = useRef<any>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEYS.reactionBest).then(v => {
+      if (v) setBestTime(parseInt(v, 10));
+    });
+    startRound();
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
+
+  const startRound = () => {
+    setPhase('ready');
+    const delay = 2000 + Math.random() * 4000;
+    timerRef.current = setTimeout(() => {
+      setPhase('go');
+      setStartTime(Date.now());
+    }, delay);
+  };
+
+  const handleTap = () => {
+    if (phase === 'ready') {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setPhase('early');
+    } else if (phase === 'go') {
+      const elapsed = Date.now() - startTime;
+      setReactionTime(elapsed);
+      if (elapsed < bestTime || bestTime === 0) {
+        setBestTime(elapsed);
+        AsyncStorage.setItem(STORAGE_KEYS.reactionBest, String(elapsed)).catch(() => {});
+      }
+      setPhase('result');
+    } else if (phase === 'result' || phase === 'early') {
+      startRound();
+    }
+  };
+
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity
+        style={styles.reactionModal}
+        activeOpacity={1}
+        onPress={handleTap}>
+        <View style={styles.reactionContent}>
+          {phase === 'waiting' && <Text style={styles.reactionText}>Loading...</Text>}
+          {phase === 'ready' && (
+            <>
+              <Text style={styles.reactionText}>WAIT...</Text>
+              <Text style={styles.reactionSub}>Tap when circle appears</Text>
+            </>
+          )}
+          {phase === 'go' && (
+            <>
+              <View style={[styles.reactionCircle, {backgroundColor: accentColor}]} />
+              <Text style={styles.reactionText}>TAP NOW!</Text>
+            </>
+          )}
+          {phase === 'early' && (
+            <>
+              <Text style={[styles.reactionText, {color: Colors.danger}]}>TOO EARLY!</Text>
+              <Text style={styles.reactionSub}>Tap to retry</Text>
+            </>
+          )}
+          {phase === 'result' && (
+            <>
+              <Text style={[styles.reactionTime, {color: accentColor}]}>{reactionTime}ms</Text>
+              {bestTime > 0 && <Text style={styles.reactionSub}>Best: {bestTime}ms</Text>}
+              <Text style={styles.reactionSub}>Tap to retry</Text>
+            </>
+          )}
+          <TouchableOpacity style={styles.reactionClose} onPress={onClose}>
+            <Text style={styles.reactionCloseText}>✕ CLOSE</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+});
+
 // ─── Memoized Clock Component with parallax + glitch ───
 const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnabled, asciiEnabled}: {clockFormat: '12' | '24'; accentColor: string; glitchEnabled: boolean; parallaxEnabled: boolean; asciiEnabled: boolean}) => {
   const [time, setTime] = useState('');
   const [displayTime, setDisplayTime] = useState('');
   const [date, setDate] = useState('');
   const [dayProgress, setDayProgress] = useState(0);
+  const [weekProgress, setWeekProgress] = useState(0);
 
   // Parallax via gyroscope (only initialize sensor if enabled)
   const sensor = useAnimatedSensor(SensorType.ROTATION, {interval: 60});
@@ -105,6 +300,12 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
 
       const totalMinutes = now.getHours() * 60 + now.getMinutes();
       setDayProgress(totalMinutes / 1440);
+
+      // Week progress: Mon=0 → Sun=6, current day + time fraction
+      const day = now.getDay(); // 0=Sun
+      const mondayBased = day === 0 ? 6 : day - 1; // Mon=0, Tue=1, ..., Sun=6
+      const dayFraction = totalMinutes / 1440;
+      setWeekProgress((mondayBased + dayFraction) / 7);
 
       let timeStr: string;
       if (clockFormat === '12') {
@@ -171,6 +372,9 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
       <View style={styles.progressWrap}>
         <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
       </View>
+      <View style={styles.weekProgressWrap}>
+        <View style={[styles.weekProgressBar, {width: `${weekProgress * 100}%`, backgroundColor: accentColor, opacity: 0.4}]} />
+      </View>
       <Text style={styles.date}>{date}</Text>
     </View>
   );
@@ -191,6 +395,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [asciiClockEnabled, setAsciiClockEnabled] = useState(false);
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [weather, setWeather] = useState<{temp: string; condition: string} | null>(null);
+  const [isRaining, setIsRaining] = useState(false);
+  const [petHealth, setPetHealth] = useState(50);
+  const [showReactionGame, setShowReactionGame] = useState(false);
   const mountedRef = useRef(true);
 
   // Animation values
@@ -306,7 +513,15 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         const text = await res.text();
         const parts = text.split('|');
         if (parts.length >= 2 && mountedRef.current) {
+          const condition = parts[1].trim().toLowerCase();
           setWeather({temp: parts[0].trim(), condition: parts[1].trim()});
+          // Detect rain for rain effect
+          setIsRaining(
+            condition.includes('rain') ||
+            condition.includes('drizzle') ||
+            condition.includes('shower') ||
+            condition.includes('thunderstorm')
+          );
         }
       } catch (e) {}
     };
@@ -317,6 +532,40 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       clearInterval(weatherInterval);
     };
   }, []);
+
+  // Pixel Pet — health based on low screen time (fed on every focus if > 30min gap)
+  useEffect(() => {
+    const loadPet = async () => {
+      try {
+        const h = await AsyncStorage.getItem(STORAGE_KEYS.petHealth);
+        if (h !== null) setPetHealth(Math.min(100, Math.max(0, parseInt(h, 10))));
+      } catch (e) {}
+    };
+    loadPet();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        const lastFed = await AsyncStorage.getItem(STORAGE_KEYS.petLastFed);
+        const now = Date.now();
+        const gap = lastFed ? now - parseInt(lastFed, 10) : 0;
+        // Feed pet if > 30 minutes since last feed (reward low screen time)
+        if (!lastFed || gap > 30 * 60 * 1000) {
+          const newHealth = Math.min(100, petHealth + 5);
+          setPetHealth(newHealth);
+          await AsyncStorage.setItem(STORAGE_KEYS.petHealth, String(newHealth));
+          await AsyncStorage.setItem(STORAGE_KEYS.petLastFed, String(now));
+        } else if (gap < 5 * 60 * 1000) {
+          // Too frequent pickups - decrease health slightly
+          const newHealth = Math.max(0, petHealth - 1);
+          setPetHealth(newHealth);
+          await AsyncStorage.setItem(STORAGE_KEYS.petHealth, String(newHealth));
+        }
+      } catch (e) {}
+    });
+    return unsubscribe;
+  }, [navigation, petHealth]);
 
   // Swipe gestures
   const navigateToRef = useRef(navigateTo);
@@ -386,6 +635,14 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             </View>
           )}
 
+          {/* Pixel Pet */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onLongPress={() => setShowReactionGame(true)}
+            delayLongPress={600}>
+            <PixelPet health={petHealth} accentColor={accentColor} />
+          </TouchableOpacity>
+
           {/* Quick Access Apps */}
           {quickApps.length > 0 && (
             <View style={styles.quickAppsSection}>
@@ -435,6 +692,14 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           onPress={() => navigateTo('AppDrawer')}
         />
       </View>
+
+      {/* Rain Effect — shows when weather indicates rain */}
+      {isRaining && <RainEffect accentColor={accentColor} />}
+
+      {/* Reaction Time Game Modal */}
+      {showReactionGame && (
+        <ReactionTimeGame accentColor={accentColor} onClose={() => setShowReactionGame(false)} />
+      )}
     </SafeAreaView>
   );
 };
@@ -494,6 +759,17 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 2,
     backgroundColor: Colors.textSecondary,
+    borderRadius: 1,
+  },
+  weekProgressWrap: {
+    height: 1,
+    backgroundColor: Colors.surface2,
+    marginTop: 3,
+    borderRadius: 1,
+    overflow: 'hidden',
+  },
+  weekProgressBar: {
+    height: 1,
     borderRadius: 1,
   },
   date: {
@@ -602,6 +878,94 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textPrimary,
     fontWeight: '500',
+  },
+  // Rain effect
+  rainContainer: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: 'none',
+    overflow: 'hidden',
+  },
+  rainDrop: {
+    position: 'absolute',
+    fontFamily: 'monospace',
+    fontSize: 12,
+  },
+  // Pixel Pet
+  petContainer: {
+    marginTop: Spacing.lg,
+    alignItems: 'center',
+  },
+  petArt: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    lineHeight: 10,
+    letterSpacing: 0,
+  },
+  petHealthBar: {
+    width: 60,
+    height: 2,
+    backgroundColor: Colors.surface2,
+    marginTop: 4,
+    borderRadius: 1,
+    overflow: 'hidden',
+  },
+  petHealthFill: {
+    height: 2,
+    borderRadius: 1,
+  },
+  petLabel: {
+    fontSize: 8,
+    color: Colors.textMuted,
+    marginTop: 2,
+    letterSpacing: 1,
+  },
+  // Reaction Time Game
+  reactionModal: {
+    flex: 1,
+    backgroundColor: 'rgba(10,10,10,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reactionContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    width: '100%',
+  },
+  reactionText: {
+    fontFamily: 'monospace',
+    fontSize: 24,
+    color: Colors.textPrimary,
+    letterSpacing: 2,
+  },
+  reactionSub: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 8,
+  },
+  reactionTime: {
+    fontFamily: 'monospace',
+    fontSize: 48,
+    fontWeight: '200',
+    letterSpacing: -1,
+  },
+  reactionCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 20,
+  },
+  reactionClose: {
+    position: 'absolute',
+    bottom: 80,
+    padding: 16,
+  },
+  reactionCloseText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textMuted,
+    letterSpacing: 1,
   },
 });
 
