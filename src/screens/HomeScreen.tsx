@@ -155,8 +155,7 @@ const PixelPet = memo(({health, accentColor}: {health: number; accentColor: stri
       <View style={styles.petHealthBar}>
         <View style={[styles.petHealthFill, {width: `${health}%`, backgroundColor: accentColor}]} />
       </View>
-      <Text style={styles.petLabel}>PET · {health}%</Text>
-      <Text style={styles.petHint}>hold to play · health ↑ less screen time</Text>
+      <Text style={styles.petLabel}>PET · {health}%  ·  {mood === 'happy' ? 'feeling good' : mood === 'neutral' ? 'doing okay' : 'needs a break'}</Text>
     </View>
   );
 });
@@ -702,10 +701,6 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return quickAppScales[pkg];
   }, [quickAppScales]);
 
-  // Pet long-press pulse
-  const petPulse = useRef(new Animated.Value(1)).current;
-  const petPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
-
   return (
     <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
@@ -753,25 +748,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
 
           {/* Pixel Pet — with long-press pulse indicator */}
           {petEnabled && (
-          <Animated.View style={{opacity: petAnim, transform: [{scale: petPulse}, {translateY: petAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPressIn={() => {
-                petPulseLoop.current = Animated.loop(
-                  Animated.sequence([
-                    Animated.timing(petPulse, {toValue: 1.06, duration: 300, useNativeDriver: true}),
-                    Animated.timing(petPulse, {toValue: 1, duration: 300, useNativeDriver: true}),
-                  ])
-                );
-                petPulseLoop.current.start();
-              }}
-              onPressOut={() => {
-                if (petPulseLoop.current) petPulseLoop.current.stop();
-                petPulse.setValue(1);
-              }}
-              delayLongPress={600}>
-              <PixelPet health={petHealth} accentColor={accentColor} />
-            </TouchableOpacity>
+          <Animated.View style={{opacity: petAnim, transform: [{translateY: petAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
+            <PixelPet health={petHealth} accentColor={accentColor} />
           </Animated.View>
           )}
 
@@ -1218,19 +1196,13 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   petLabel: {
-    fontSize: 8,
-    color: Colors.textMuted,
-    marginTop: 2,
-    letterSpacing: 1,
-  },
-  petHint: {
     fontFamily: 'monospace',
-    fontSize: 7,
-    color: Colors.textMuted,
-    marginTop: 1,
+    fontSize: 9,
+    color: Colors.textSecondary,
+    marginTop: 4,
     letterSpacing: 0.5,
-    opacity: 0.5,
   },
+
   // First-launch hints overlay
   hintsOverlay: {
     flex: 1,
