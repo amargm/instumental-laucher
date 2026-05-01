@@ -14,6 +14,7 @@ import {
   LayoutAnimation,
   UIManager,
   Platform,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -411,6 +412,17 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => handler.remove();
   }, []);
+
+  // Reset launch animation when app returns from background
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        launchScale.setValue(1);
+        launchOpacity.setValue(1);
+      }
+    });
+    return () => sub.remove();
+  }, [launchScale, launchOpacity]);
 
   // Load settings
   useEffect(() => {
