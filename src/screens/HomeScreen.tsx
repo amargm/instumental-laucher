@@ -402,10 +402,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const launchOpacity = useRef(new Animated.Value(1)).current;
   const lastNavRef = useRef(0);
 
-  // Debounced navigation to prevent double-taps — resets on animation complete
+  // Debounced navigation to prevent double-fires
   const navigateTo = useCallback((screen: string) => {
     const now = Date.now();
-    if (now - lastNavRef.current < 300) return;
+    if (now - lastNavRef.current < 500) return;
     lastNavRef.current = now;
     navigation.navigate(screen);
   }, [navigation]);
@@ -479,9 +479,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         const q = m.get(STORAGE_KEYS.quote);
         if (q) setQuote(q);
         const apps = m.get(STORAGE_KEYS.quickApps);
-        if (apps) setQuickApps(JSON.parse(apps));
+        if (apps) { try { setQuickApps(JSON.parse(apps)); } catch (e) {} }
         const dock = m.get(STORAGE_KEYS.dockApps);
-        if (dock) setDockApps(JSON.parse(dock));
+        if (dock) { try { setDockApps(JSON.parse(dock)); } catch (e) {} }
         const accent = m.get(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
         const glitch = m.get(STORAGE_KEYS.glitchEnabled);
@@ -545,9 +545,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         const q = m.get(STORAGE_KEYS.quote);
         setQuote(q || '');
         const apps = m.get(STORAGE_KEYS.quickApps);
-        if (apps) setQuickApps(JSON.parse(apps));
+        if (apps) { try { setQuickApps(JSON.parse(apps)); } catch (e) {} }
         const dock = m.get(STORAGE_KEYS.dockApps);
-        if (dock) setDockApps(JSON.parse(dock));
+        if (dock) { try { setDockApps(JSON.parse(dock)); } catch (e) {} }
         const accent = m.get(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
         const glitch = m.get(STORAGE_KEYS.glitchEnabled);
@@ -765,10 +765,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         swipeDragY.setValue(clamped);
       },
       onPanResponderRelease: (_, gesture) => {
-        // Spring back to rest — reset debounce on animation complete
-        Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start(() => {
-          lastNavRef.current = 0; // allow next gesture immediately after animation ends
-        });
+        // Navigate immediately on threshold — don't wait for spring
         if (gesture.dy > 80) {
           heavy();
           navigateToRef.current('Terminal');
@@ -776,6 +773,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           heavy();
           navigateToRef.current('AppDrawer');
         }
+        // Spring back to rest position
+        Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start();
       },
       onPanResponderTerminate: () => {
         Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8}).start();

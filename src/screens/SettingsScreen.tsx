@@ -73,9 +73,9 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         const q = map.get(STORAGE_KEYS.quote);
         if (q !== null && q !== undefined) setQuote(q);
         const apps = map.get(STORAGE_KEYS.quickApps);
-        if (apps) setQuickApps(JSON.parse(apps));
+        if (apps) { try { setQuickApps(JSON.parse(apps)); } catch (e) {} }
         const dock = map.get(STORAGE_KEYS.dockApps);
-        if (dock) setDockApps(JSON.parse(dock));
+        if (dock) { try { setDockApps(JSON.parse(dock)); } catch (e) {} }
         const accent = map.get(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
         const glitch = map.get(STORAGE_KEYS.glitchEnabled);

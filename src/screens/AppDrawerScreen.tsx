@@ -108,10 +108,8 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   // Launch animation
   const launchScale = useRef(new Animated.Value(1)).current;
   const launchOpacity = useRef(new Animated.Value(1)).current;
-  // Staggered list entrance — animate first 8 visible items
-  const itemAnims = useRef<Animated.Value[]>(
-    Array.from({length: 8}, () => new Animated.Value(0))
-  ).current;
+  // Single fade-in for the list container on mount
+  const listFadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadApps();
@@ -122,10 +120,8 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       cachedApps = [];
       loadApps();
     });
-    // Stagger entrance for first 8 items
-    Animated.stagger(20, itemAnims.map(anim =>
-      Animated.timing(anim, {toValue: 1, duration: 150, useNativeDriver: true})
-    )).start();
+    // Single smooth fade-in for entire list (no per-item stagger)
+    Animated.timing(listFadeAnim, {toValue: 1, duration: 200, useNativeDriver: true}).start();
     return () => sub.remove();
   }, []);
 
@@ -260,8 +256,8 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   }, [launchScale, launchOpacity]);
 
   const renderApp = useCallback(({item, index}: {item: AppInfo; index: number}) => (
-    <AppItem item={item} onPress={handleLaunch} onLongPress={handleLongPress} index={index} staggerAnim={index < 8 ? itemAnims[index] : undefined} />
-  ), [handleLaunch, handleLongPress, itemAnims]);
+    <AppItem item={item} onPress={handleLaunch} onLongPress={handleLongPress} />
+  ), [handleLaunch, handleLongPress]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -325,6 +321,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       {loading && <LoadingDots />}
 
       {/* App List */}
+      <Animated.View style={{flex: 1, opacity: listFadeAnim}}>
       <FlatList
         data={filteredApps}
         keyExtractor={item => item.packageName}
@@ -347,6 +344,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
           ) : null
         }
       />
+      </Animated.View>
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
@@ -399,7 +397,7 @@ function cacheIcon(key: string, value: string) {
   iconCache.set(key, value);
 }
 
-const AppItem = memo(({item, onPress, onLongPress, index, staggerAnim}: {item: AppInfo; onPress: (pkg: string) => void; onLongPress?: (pkg: string) => void; index?: number; staggerAnim?: Animated.Value}) => {
+const AppItem = memo(({item, onPress, onLongPress}: {item: AppInfo; onPress: (pkg: string) => void; onLongPress?: (pkg: string) => void}) => {
   const [icon, setIcon] = useState<string>(iconCache.get(item.packageName) || '');
   const CustomIcon = APP_ICON_MAP[item.packageName];
 
@@ -414,7 +412,7 @@ const AppItem = memo(({item, onPress, onLongPress, index, staggerAnim}: {item: A
     }
   }, [item.packageName]);
 
-  const content = (
+  return (
     <TouchableOpacity
       style={styles.appItem}
       activeOpacity={0.7}
@@ -438,19 +436,6 @@ const AppItem = memo(({item, onPress, onLongPress, index, staggerAnim}: {item: A
       </View>
     </TouchableOpacity>
   );
-
-  if (staggerAnim) {
-    return (
-      <Animated.View style={{
-        opacity: staggerAnim,
-        transform: [{translateX: staggerAnim.interpolate({inputRange: [0, 1], outputRange: [12, 0]})}],
-      }}>
-        {content}
-      </Animated.View>
-    );
-  }
-
-  return content;
 });
 
 const styles = StyleSheet.create({

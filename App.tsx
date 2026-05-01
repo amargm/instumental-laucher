@@ -72,12 +72,17 @@ const App = () => {
   // We navigate back to Home screen if on a sub-screen.
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('onHomePressed', () => {
-      const state = navRef.current?.getRootState();
-      if (state && state.routes.length > 0) {
-        const currentRoute = state.routes[state.index ?? 0]?.name;
-        if (currentRoute !== 'Home') {
-          navRef.current?.reset({index: 0, routes: [{name: 'Home'}]});
+      try {
+        if (!navRef.current?.isReady()) return;
+        const state = navRef.current?.getRootState();
+        if (state && state.routes.length > 0) {
+          const currentRoute = state.routes[state.index ?? 0]?.name;
+          if (currentRoute !== 'Home') {
+            navRef.current?.reset({index: 0, routes: [{name: 'Home'}]});
+          }
         }
+      } catch (e) {
+        // Navigation not ready yet — safe to ignore
       }
     });
     return () => sub.remove();
@@ -116,7 +121,7 @@ const App = () => {
             <Stack.Screen
               name="AppDrawer"
               component={AppDrawerWithBoundary}
-              options={{animation: 'slide_from_bottom', animationDuration: 100}}
+              options={{animation: 'fade_from_bottom', animationDuration: 180}}
             />
             <Stack.Screen
               name="Settings"
