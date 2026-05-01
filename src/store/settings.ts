@@ -28,6 +28,7 @@ export interface Settings {
   gesturesEnabled: boolean;
   bgEffect: BgEffect;
   theme: ThemeName;
+  swipeDownAction: 'terminal' | 'drawer';
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -43,6 +44,7 @@ const DEFAULT_SETTINGS: Settings = {
   gesturesEnabled: true,
   bgEffect: 'void',
   theme: 'midnight',
+  swipeDownAction: 'terminal',
 };
 
 // ─── In-memory cache ─────────────────────────────────────
@@ -85,6 +87,7 @@ async function _doLoad(): Promise<void> {
       STORAGE_KEYS.gesturesEnabled,
       STORAGE_KEYS.bgEffect,
       STORAGE_KEYS.theme,
+      STORAGE_KEYS.swipeDownAction,
     ];
     const m = await safeMultiGet(keys);
 
@@ -126,6 +129,9 @@ async function _doLoad(): Promise<void> {
       _settings.theme = th as ThemeName;
       applyTheme(th as ThemeName);
     }
+
+    const sda = m.get(STORAGE_KEYS.swipeDownAction);
+    if (sda === 'terminal' || sda === 'drawer') _settings.swipeDownAction = sda;
   } catch (_) {}
   _loaded = true;
 }
@@ -182,6 +188,10 @@ export async function updateSettings(partial: Partial<Settings>): Promise<void> 
     _settings.theme = partial.theme;
     pairs.push([STORAGE_KEYS.theme, partial.theme]);
     applyTheme(partial.theme);
+  }
+  if (partial.swipeDownAction !== undefined) {
+    _settings.swipeDownAction = partial.swipeDownAction;
+    pairs.push([STORAGE_KEYS.swipeDownAction, partial.swipeDownAction]);
   }
 
   if (pairs.length > 0) {

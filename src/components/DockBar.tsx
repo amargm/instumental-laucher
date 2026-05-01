@@ -1,6 +1,7 @@
 import React, {useState, useRef, memo} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, Animated} from 'react-native';
 import {Colors, Spacing} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 
 interface DockItemProps {
   label: string;
@@ -31,7 +32,7 @@ const DockItem = memo(({label, accentColor, onPress}: DockItemProps) => {
       accessibilityLabel={`Open ${label}`}
       style={styles.termDockItem}>
       <Animated.View style={[styles.termDockInner, {transform: [{scale: scaleAnim}]}]}>
-        <Text style={[styles.termDockLabel, pressed && {color: accentColor}]}>{label}</Text>
+        <Text style={[styles.termDockLabel, {color: pressed ? accentColor : Colors.textSecondary}]}>{label}</Text>
         <View style={[styles.termDockLine, {backgroundColor: pressed ? accentColor : Colors.border}]} />
       </Animated.View>
     </TouchableOpacity>
@@ -47,8 +48,9 @@ interface DockBarProps {
 }
 
 const DockBar = memo(({dockApps, accentColor, getAppName, onAppPress, onDrawerPress}: DockBarProps) => {
+  useTheme(); // re-render on theme change
   return (
-    <View style={styles.termDock}>
+    <View style={[styles.termDock, {borderTopColor: Colors.border, backgroundColor: Colors.bg}]}>
       {dockApps.map(pkg => {
         const name = getAppName(pkg);
         const label = name.slice(0, 4).toUpperCase();

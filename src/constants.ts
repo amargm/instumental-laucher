@@ -11,6 +11,7 @@ export const STORAGE_KEYS = {
   petEnabled: '@settings_pet_enabled',
   bgEffect: '@settings_bg_effect',
   theme: '@settings_theme',
+  swipeDownAction: '@settings_swipe_down_action',
   petHealth: '@pet_health',
   petLastFed: '@pet_last_fed',
   hintsDismissed: '@hints_dismissed',

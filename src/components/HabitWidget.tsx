@@ -9,6 +9,7 @@ import {
   Keyboard,
 } from 'react-native';
 import {Colors, Spacing} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 import {tick, impact} from '../native/Haptics';
 import {
   getHabits,
@@ -31,6 +32,7 @@ interface Props {
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = false}) => {
+  useTheme(); // re-render on theme change
   const [data, setData] = useState<HabitData>({habits: [], logs: {}});
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -108,7 +110,7 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
         style={styles.emptyWrap}
         activeOpacity={0.6}
         onPress={() => { setExpanded(true); setAdding(true); }}>
-        <Text style={styles.emptyText}>+ ADD HABIT</Text>
+        <Text style={[styles.emptyText, {color: Colors.textMuted}]}>+ ADD HABIT</Text>
       </TouchableOpacity>
     );
   }
@@ -120,8 +122,8 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
         style={styles.header}
         activeOpacity={0.7}
         onPress={() => { tick(); setExpanded(!expanded); }}>
-        <Text style={styles.headerText}>HABITS</Text>
-        <Text style={styles.headerArrow}>{expanded ? '▾' : '▸'}</Text>
+        <Text style={[styles.headerText, {color: Colors.textMuted}]}>HABITS</Text>
+        <Text style={[styles.headerArrow, {color: Colors.textMuted}]}>{expanded ? '▾' : '▸'}</Text>
       </TouchableOpacity>
 
       {/* Compact view — one-line per habit with progress bar + tap to log */}
@@ -133,26 +135,26 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
         const week = getWeekData(data.logs, habit.id);
 
         return (
-          <View key={habit.id} style={styles.habitRow}>
+          <View key={habit.id} style={[styles.habitRow, {borderBottomColor: Colors.surface2}]}>
             {/* Tap zone — log the habit */}
             <TouchableOpacity
               style={styles.habitMain}
               activeOpacity={0.6}
               onPress={() => handleLog(habit)}
               onLongPress={!readOnly && expanded ? () => handleRemove(habit) : undefined}>
-              <Text style={[styles.habitName, done && {color: accentColor}]}>
+              <Text style={[styles.habitName, {color: done ? accentColor : Colors.textPrimary}]}>
                 {done ? '✓ ' : ''}{habit.name}
               </Text>
               <View style={styles.progressRow}>
                 {/* ASCII progress bar */}
-                <Text style={styles.progressBar}>
+                <Text style={[styles.progressBar, {color: done ? accentColor : Colors.textMuted}]}>
                   {renderBar(pct, 10, done ? accentColor : Colors.textMuted)}
                 </Text>
-                <Text style={[styles.habitCount, done && {color: accentColor}]}>
+                <Text style={[styles.habitCount, {color: done ? accentColor : Colors.textSecondary}]}>
                   {today}/{habit.goal}
                 </Text>
                 {streak > 0 && (
-                  <Text style={styles.streak}>🔥{streak}</Text>
+                  <Text style={[styles.streak, {color: Colors.textSecondary}]}>🔥{streak}</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -162,7 +164,7 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
               <View style={styles.weekRow}>
                 {week.map((count, i) => (
                   <View key={i} style={styles.weekDayCol}>
-                    <Text style={styles.weekDayLabel}>{DAYS[i]}</Text>
+                    <Text style={[styles.weekDayLabel, {color: Colors.textMuted}]}>{DAYS[i]}</Text>
                     <View
                       style={[
                         styles.weekDot,
@@ -184,17 +186,17 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
       {/* Expanded: Add button / form (only in config mode) */}
       {!readOnly && expanded && !adding && (
         <TouchableOpacity
-          style={styles.addBtn}
+          style={[styles.addBtn, {borderColor: Colors.border}]}
           activeOpacity={0.6}
           onPress={() => setAdding(true)}>
-          <Text style={styles.addBtnText}>+ NEW HABIT</Text>
+          <Text style={[styles.addBtnText, {color: Colors.textMuted}]}>+ NEW HABIT</Text>
         </TouchableOpacity>
       )}
 
       {!readOnly && expanded && adding && (
-        <View style={styles.addForm}>
+        <View style={[styles.addForm, {borderTopColor: Colors.surface2}]}>
           <TextInput
-            style={styles.addInput}
+            style={[styles.addInput, {color: Colors.textPrimary, borderBottomColor: Colors.border}]}
             placeholder="habit name"
             placeholderTextColor={Colors.textMuted}
             value={newName}
@@ -203,27 +205,27 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
             returnKeyType="next"
           />
           <View style={styles.addRow}>
-            <Text style={styles.addLabel}>goal/day:</Text>
+            <Text style={[styles.addLabel, {color: Colors.textMuted}]}>goal/day:</Text>
             <TextInput
-              style={[styles.addInput, {width: 40, textAlign: 'center'}]}
+              style={[styles.addInput, {color: Colors.textPrimary, borderBottomColor: Colors.border, width: 40, textAlign: 'center'}]}
               value={newGoal}
               onChangeText={setNewGoal}
               keyboardType="numeric"
               returnKeyType="done"
               onSubmitEditing={handleAdd}
             />
-            <TouchableOpacity style={styles.addConfirm} onPress={handleAdd}>
-              <Text style={[styles.addConfirmText, {color: accentColor}]}>✓ ADD</Text>
+            <TouchableOpacity style={[styles.addConfirm, {backgroundColor: Colors.textPrimary}]} onPress={handleAdd}>
+              <Text style={[styles.addConfirmText, {color: Colors.bg}]}>✓ ADD</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { setAdding(false); Keyboard.dismiss(); }}>
-              <Text style={styles.cancelText}>✕</Text>
+              <Text style={[styles.cancelText, {color: Colors.textMuted}]}>✕</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
 
       {!readOnly && expanded && (
-        <Text style={styles.hint}>tap = log · long-press = delete</Text>
+        <Text style={[styles.hint, {color: Colors.textMuted}]}>tap = log · long-press = delete</Text>
       )}
     </View>
   );

@@ -60,6 +60,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const mountedRef = useRef(true);
   const gesturesRef = useRef(settings.gesturesEnabled);
   gesturesRef.current = settings.gesturesEnabled;
+  const swipeDownRef = useRef(settings.swipeDownAction);
+  swipeDownRef.current = settings.swipeDownAction;
 
   // Music mode hook
   const {audioDevice, musicApps, musicAppsOpen, musicBtnOpacity, musicBtnScale, toggleMusicApps} =
@@ -208,10 +210,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > 80) {
           heavy();
-          navigateToRef.current('Terminal');
+          navigateToRef.current(swipeDownRef.current === 'drawer' ? 'AppDrawer' : 'Terminal');
         } else if (gesture.dy < -80) {
           heavy();
-          navigateToRef.current('AppDrawer');
+          navigateToRef.current(swipeDownRef.current === 'drawer' ? 'Terminal' : 'AppDrawer');
         }
         Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start();
       },

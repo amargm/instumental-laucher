@@ -1,6 +1,7 @@
 import React, {useRef, useCallback, useEffect, memo} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, Animated} from 'react-native';
 import {Colors, Spacing} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 import {APP_ICON_MAP} from './AppIcons';
 import {AppInfo} from '../native/InstalledApps';
 
@@ -11,6 +12,7 @@ interface QuickAppsBarProps {
 }
 
 const QuickAppsBar = memo(({quickApps, installedApps, onAppPress}: QuickAppsBarProps) => {
+  useTheme(); // re-render on theme change
   if (quickApps.length === 0) return null;
 
   const getAppName = useCallback((packageName: string): string => {
@@ -54,10 +56,10 @@ const QuickAppsBar = memo(({quickApps, installedApps, onAppPress}: QuickAppsBarP
               onPressOut={() => Animated.spring(scale, {toValue: 1, useNativeDriver: true, friction: 6}).start()}
               onPress={() => onAppPress(pkg)}>
               <Animated.View style={[styles.quickAppItem, {transform: [{scale}]}]}>
-                <View style={styles.quickAppIcon}>
+                <View style={[styles.quickAppIcon, {backgroundColor: Colors.surface, borderColor: Colors.border}]}>
                   {renderIcon(pkg)}
                 </View>
-                <Text style={styles.quickAppName} numberOfLines={1}>
+                <Text style={[styles.quickAppName, {color: Colors.textMuted}]} numberOfLines={1}>
                   {getAppName(pkg).slice(0, 6)}
                 </Text>
               </Animated.View>

@@ -55,6 +55,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [allApps, setAllApps] = useState<AppInfo[]>([]);
   const [bgEffect, setBgEffect] = useState<BgEffect>('void');
   const [currentTheme, setCurrentTheme] = useState<ThemeName>('midnight');
+  const [swipeDownAction, setSwipeDownAction] = useState<'terminal' | 'drawer'>('terminal');
 
   // Initialize local state from settings store (already loaded on app start)
   useEffect(() => {
@@ -71,6 +72,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     setPetEnabled(s.petEnabled);
     setBgEffect(s.bgEffect);
     setCurrentTheme(s.theme);
+    setSwipeDownAction(s.swipeDownAction);
   }, []);
 
   // Load real device data
@@ -449,7 +451,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>↕</Text>
             <View>
               <Text style={styles.settingName}>Swipe Gestures</Text>
-              <Text style={styles.settingDesc}>↓ terminal · ↑ app drawer</Text>
+              <Text style={styles.settingDesc}>↓ {swipeDownAction === 'terminal' ? 'terminal' : 'app drawer'} · ↑ {swipeDownAction === 'terminal' ? 'app drawer' : 'terminal'}</Text>
             </View>
           </View>
           <Switch
@@ -459,6 +461,21 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             thumbColor={gesturesEnabled ? Colors.bg : Colors.textMuted}
           />
         </View>
+
+        <TouchableOpacity style={styles.settingItem} onPress={() => {
+          tick();
+          const next = swipeDownAction === 'terminal' ? 'drawer' : 'terminal';
+          setSwipeDownAction(next);
+          updateSettings({swipeDownAction: next});
+        }}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>⇅</Text>
+            <View>
+              <Text style={styles.settingName}>Swipe Down Action</Text>
+              <Text style={styles.settingDesc}>{swipeDownAction === 'terminal' ? 'TERMINAL' : 'APP DRAWER'}</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
 
         {/* Aesthetics */}
         <Text style={styles.groupLabel}>AESTHETICS</Text>

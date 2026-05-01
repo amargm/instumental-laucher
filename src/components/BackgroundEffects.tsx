@@ -1,6 +1,7 @@
 import React, {memo, useEffect, useRef, useState, useCallback} from 'react';
 import {View, Text, StyleSheet, Dimensions, Animated} from 'react-native';
 import {Colors} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 import type {BgEffect} from '../constants';
 
 const {width: W, height: H} = Dimensions.get('window');
@@ -119,7 +120,7 @@ const StaticBg = memo(({active}: {active: boolean}) => {
   return (
     <View style={staticStyles.container} pointerEvents="none">
       {grid.map((row, i) => (
-        <Text key={i} style={staticStyles.row}>{row}</Text>
+        <Text key={i} style={[staticStyles.row, {color: Colors.textPrimary}]}>{row}</Text>
       ))}
     </View>
   );
@@ -166,7 +167,7 @@ const GridBg = memo(({active}: {active: boolean}) => {
   return (
     <Animated.View style={[gridStyles.container, {opacity: fadeAnim}]} pointerEvents="none">
       {dots.map((d, i) => (
-        <View key={i} style={[gridStyles.dot, {left: d.x, top: d.y}]} />
+        <View key={i} style={[gridStyles.dot, {left: d.x, top: d.y, backgroundColor: Colors.textPrimary}]} />
       ))}
     </Animated.View>
   );
@@ -195,6 +196,7 @@ interface Props {
 }
 
 const BackgroundEffect = memo(({effect, active}: Props) => {
+  useTheme(); // re-render on theme change so child colors update
   if (effect === 'void') return null;
   if (effect === 'matrix') return <MatrixBg active={active} />;
   if (effect === 'static') return <StaticBg active={active} />;

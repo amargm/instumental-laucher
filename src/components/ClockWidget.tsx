@@ -7,6 +7,7 @@ import ReanimatedAnimated, {
   withSpring,
 } from 'react-native-reanimated';
 import {Colors, Spacing} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 
 // ─── Glitch characters — terminal/instrument-style digital artifacts ───
 const GLITCH_CHARS = '0123456789▐░▒▓─│┤├';
@@ -39,6 +40,7 @@ interface ClockWidgetProps {
 }
 
 const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnabled}: ClockWidgetProps) => {
+  useTheme(); // re-render on theme change
   const [time, setTime] = useState('');
   const [displayTime, setDisplayTime] = useState('');
   const timeRef = useRef('');
@@ -163,22 +165,22 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
   return (
     <View style={styles.widget}>
       <ParallaxWrapper enabled={parallaxEnabled}>
-        <Text style={styles.time}>{displayTime}<Text style={[styles.cursor, {opacity: cursorVisible ? 1 : 0}]}>_</Text></Text>
+        <Text style={[styles.time, {color: Colors.textPrimary}]}>{displayTime}<Text style={[styles.cursor, {color: Colors.textMuted, opacity: cursorVisible ? 1 : 0}]}>_</Text></Text>
       </ParallaxWrapper>
       <View style={styles.progressRow}>
-        <Text style={styles.progressLabel}>DAY</Text>
-        <View style={[styles.progressWrap, {flex: 1}]}>
+        <Text style={[styles.progressLabel, {color: Colors.textMuted}]}>DAY</Text>
+        <View style={[styles.progressWrap, {flex: 1, backgroundColor: Colors.surface2}]}>
           <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
         </View>
-        <Text style={styles.progressPct}>{Math.round(dayProgress * 100)}%</Text>
+        <Text style={[styles.progressPct, {color: Colors.textMuted}]}>{Math.round(dayProgress * 100)}%</Text>
       </View>
       <View style={[styles.progressRow, {marginTop: 3}]}>
-        <Text style={styles.progressLabel}>WK</Text>
-        <View style={[styles.weekProgressWrap, {flex: 1}]}>
+        <Text style={[styles.progressLabel, {color: Colors.textMuted}]}>WK</Text>
+        <View style={[styles.weekProgressWrap, {flex: 1, backgroundColor: Colors.surface2}]}>
           <View style={[styles.weekProgressBar, {width: `${weekProgress * 100}%`, backgroundColor: accentColor, opacity: 0.4}]} />
         </View>
       </View>
-      <Text style={styles.date}>{date}</Text>
+      <Text style={[styles.date, {color: Colors.textSecondary}]}>{date}</Text>
     </View>
   );
 });

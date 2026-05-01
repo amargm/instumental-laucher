@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, memo} from 'react';
 import {View, Text, StyleSheet, Animated} from 'react-native';
 import {Colors, Spacing} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 
 const PET_FACES = {
   happy: '(• ᴗ •)',
@@ -21,6 +22,7 @@ interface PixelPetProps {
 }
 
 const PixelPet = memo(({health, accentColor, active}: PixelPetProps) => {
+  useTheme(); // re-render on theme change
   const breatheAnim = useRef(new Animated.Value(1)).current;
   const loopRef = useRef<Animated.CompositeAnimation | null>(null);
   const mood = health > 70 ? 'happy' : health > 30 ? 'neutral' : 'sad';
@@ -48,10 +50,10 @@ const PixelPet = memo(({health, accentColor, active}: PixelPetProps) => {
         <Text style={[styles.petFace, {color: accentColor}]}>{PET_FACES[mood]}</Text>
         <Text style={[styles.petBody, {color: accentColor}]}>{PET_BODIES[mood]}</Text>
       </Animated.View>
-      <View style={styles.petHealthBar}>
+      <View style={[styles.petHealthBar, {backgroundColor: Colors.surface2}]}>
         <View style={[styles.petHealthFill, {width: `${health}%`, backgroundColor: accentColor}]} />
       </View>
-      <Text style={styles.petLabel}>PET · {health}%  ·  {mood === 'happy' ? 'feeling good' : mood === 'neutral' ? 'doing okay' : 'needs a break'}</Text>
+      <Text style={[styles.petLabel, {color: Colors.textMuted}]}>PET · {health}%  ·  {mood === 'happy' ? 'feeling good' : mood === 'neutral' ? 'doing okay' : 'needs a break'}</Text>
     </View>
   );
 });

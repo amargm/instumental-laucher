@@ -1,6 +1,7 @@
 import React, {useMemo, useCallback, memo} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, LayoutAnimation, Animated} from 'react-native';
 import {Colors, Spacing} from '../theme/tokens';
+import {useTheme} from '../hooks/useTheme';
 import {APP_ICON_MAP} from './AppIcons';
 import {AppInfo} from '../native/InstalledApps';
 import {tick} from '../native/Haptics';
@@ -17,15 +18,16 @@ interface MusicModeProps {
 }
 
 const MusicMode = memo(({audioConnected, musicApps, musicAppsOpen, accentColor, btnOpacity, btnScale, onToggle, onAppPress}: MusicModeProps) => {
+  useTheme(); // re-render on theme change
   if (!audioConnected || musicApps.length === 0) return null;
 
   return (
     <Animated.View style={[styles.musicModeWrap, {opacity: btnOpacity, transform: [{scale: btnScale}]}]}>
       <TouchableOpacity
-        style={[styles.musicToggleBtn, musicAppsOpen && {borderColor: accentColor}]}
+        style={[styles.musicToggleBtn, {borderColor: musicAppsOpen ? accentColor : Colors.border}]}
         activeOpacity={0.7}
         onPress={onToggle}>
-        <Text style={[styles.musicToggleText, musicAppsOpen && {color: accentColor}]}>
+        <Text style={[styles.musicToggleText, {color: musicAppsOpen ? accentColor : Colors.textMuted}]}>
           🎧 {musicAppsOpen ? 'HIDE' : 'LISTENING'}
         </Text>
       </TouchableOpacity>
@@ -34,15 +36,15 @@ const MusicMode = memo(({audioConnected, musicApps, musicAppsOpen, accentColor, 
           {musicApps.map(app => (
             <TouchableOpacity
               key={app.packageName}
-              style={styles.musicAppItem}
+              style={[styles.musicAppItem, {borderBottomColor: Colors.surface2}]}
               activeOpacity={0.6}
               onPress={() => onAppPress(app.packageName)}>
-              <View style={styles.musicAppIcon}>
+              <View style={[styles.musicAppIcon, {backgroundColor: Colors.surface, borderColor: Colors.border}]}>
                 {APP_ICON_MAP[app.packageName]
                   ? React.createElement(APP_ICON_MAP[app.packageName], {size: 14, color: Colors.textPrimary})
-                  : <Text style={styles.musicAppLetter}>{app.name.charAt(0).toUpperCase()}</Text>}
+                  : <Text style={[styles.musicAppLetter, {color: Colors.textPrimary}]}>{app.name.charAt(0).toUpperCase()}</Text>}
               </View>
-              <Text style={styles.musicAppName} numberOfLines={1}>{app.name}</Text>
+              <Text style={[styles.musicAppName, {color: Colors.textSecondary}]} numberOfLines={1}>{app.name}</Text>
             </TouchableOpacity>
           ))}
         </View>
