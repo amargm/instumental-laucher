@@ -12,7 +12,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
-import {applyTheme, THEME_NAMES, ThemeName} from '../theme/tokens';
 import {getBatteryInfo, isNotificationAccessGranted, openNotificationListenerSettings, isDefaultLauncher, openDefaultLauncherChooser} from '../native/DeviceInfo';
 import {openSystemSettings, getInstalledApps, AppInfo} from '../native/InstalledApps';
 
@@ -20,14 +19,15 @@ interface Props {
   navigation: any;
 }
 
-import {STORAGE_KEYS} from '../constants';
-import type {BgEffect} from '../constants';
 import {BG_EFFECTS} from '../constants';
+import type {BgEffect} from '../constants';
 import {tick, impact} from '../native/Haptics';
 import {NavItem} from '../components/NavItem';
 import {useTheme} from '../hooks/useTheme';
 import {useBackToHome} from '../hooks/useBackToHome';
-import {updateSettings} from '../store/settings';
+import {updateSettings, getSettings} from '../store/settings';
+import type {ThemeName} from '../theme/tokens';
+import {THEME_NAMES} from '../theme/tokens';
 import {HabitWidget} from '../components/HabitWidget';
 
 const ACCENT_COLORS = [
@@ -56,57 +56,21 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [bgEffect, setBgEffect] = useState<BgEffect>('void');
   const [currentTheme, setCurrentTheme] = useState<ThemeName>('midnight');
 
-  // Load persisted settings — single multiGet to avoid sequential renders
+  // Initialize local state from settings store (already loaded on app start)
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const keys = [
-          STORAGE_KEYS.gesturesEnabled,
-          STORAGE_KEYS.clockFormat,
-          STORAGE_KEYS.quote,
-          STORAGE_KEYS.quickApps,
-          STORAGE_KEYS.dockApps,
-          STORAGE_KEYS.accentColor,
-          STORAGE_KEYS.glitchEnabled,
-          STORAGE_KEYS.parallaxEnabled,
-          STORAGE_KEYS.rainEnabled,
-          STORAGE_KEYS.petEnabled,
-          STORAGE_KEYS.bgEffect,
-          STORAGE_KEYS.theme,
-        ];
-        const results = await AsyncStorage.multiGet(keys);
-        const map = new Map(results);
-
-        const g = map.get(STORAGE_KEYS.gesturesEnabled);
-        if (g !== null && g !== undefined) setGesturesEnabled(g === 'true');
-        const fmt = map.get(STORAGE_KEYS.clockFormat);
-        if (fmt === '12' || fmt === '24') setClockFormat(fmt);
-        const q = map.get(STORAGE_KEYS.quote);
-        if (q !== null && q !== undefined) setQuote(q);
-        const apps = map.get(STORAGE_KEYS.quickApps);
-        if (apps) { try { setQuickApps(JSON.parse(apps)); } catch (e) {} }
-        const dock = map.get(STORAGE_KEYS.dockApps);
-        if (dock) { try { setDockApps(JSON.parse(dock)); } catch (e) {} }
-        const accent = map.get(STORAGE_KEYS.accentColor);
-        if (accent) setAccentColor(accent);
-        const glitch = map.get(STORAGE_KEYS.glitchEnabled);
-        if (glitch !== null && glitch !== undefined) setGlitchEnabled(glitch === 'true');
-        const parallax = map.get(STORAGE_KEYS.parallaxEnabled);
-        if (parallax !== null && parallax !== undefined) setParallaxEnabled(parallax === 'true');
-        const rain = map.get(STORAGE_KEYS.rainEnabled);
-        if (rain !== null && rain !== undefined) setRainEnabled(rain === 'true');
-        const pet = map.get(STORAGE_KEYS.petEnabled);
-        if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
-        const bg = map.get(STORAGE_KEYS.bgEffect);
-        if (bg && BG_EFFECTS.includes(bg as BgEffect)) setBgEffect(bg as BgEffect);
-        const th = map.get(STORAGE_KEYS.theme);
-        if (th && THEME_NAMES.includes(th as ThemeName)) {
-          setCurrentTheme(th as ThemeName);
-          applyTheme(th as ThemeName);
-        }
-      } catch (e) {}
-    };
-    loadSettings();
+    const s = getSettings();
+    setGesturesEnabled(s.gesturesEnabled);
+    setClockFormat(s.clockFormat);
+    setQuote(s.quote);
+    setQuickApps(s.quickApps);
+    setDockApps(s.dockApps);
+    setAccentColor(s.accentColor);
+    setGlitchEnabled(s.glitchEnabled);
+    setParallaxEnabled(s.parallaxEnabled);
+    setRainEnabled(s.rainEnabled);
+    setPetEnabled(s.petEnabled);
+    setBgEffect(s.bgEffect);
+    setCurrentTheme(s.theme);
   }, []);
 
   // Load real device data
@@ -166,10 +130,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     return false;
   }, []);
   useBackToHome(navigation, handleBack);
-
-  const safeSave = async (key: string, value: string) => {
-    try { await AsyncStorage.setItem(key, value); } catch (e) {}
-  };
 
   const toggleGestures = async (value: boolean) => {
     setGesturesEnabled(value);
@@ -256,8 +216,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     const idx = THEME_NAMES.indexOf(currentTheme);
     const next = THEME_NAMES[(idx + 1) % THEME_NAMES.length];
     setCurrentTheme(next);
-    applyTheme(next);
-    safeSave(STORAGE_KEYS.theme, next);
+    updateSettings({theme: next});
   };
 
   if (showAppPicker) {

@@ -79,10 +79,11 @@ export const HabitWidget: React.FC<Props> = ({accentColor, active, readOnly = fa
 
   const handleAdd = async () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || name.length > 50) return;
     impact();
     try {
-      await addHabit(name, Math.max(1, parseInt(newGoal, 10) || 1));
+      const result = await addHabit(name, Math.max(1, parseInt(newGoal, 10) || 1));
+      if (!result) return; // Duplicate name or max habits reached
       setNewName('');
       setNewGoal('1');
       setAdding(false);

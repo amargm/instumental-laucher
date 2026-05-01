@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {APP_CACHE_TTL} from '../constants';
 import type {BgEffect} from '../constants';
 import {BG_EFFECTS} from '../constants';
-import {applyTheme, THEME_NAMES, ThemeName} from '../theme/tokens';
+import {THEME_NAMES, ThemeName} from '../theme/tokens';
 import {getBatteryInfo, getConnectivityInfo, isHeadphonesConnected} from '../native/DeviceInfo';
 import {getInstalledApps, launchApp, AppInfo, openSystemSettings} from '../native/InstalledApps';
 import {
@@ -12,7 +12,7 @@ import {
   openDisplaySettings,
   openLocationSettings,
 } from '../native/DeviceInfo';
-import {STORAGE_KEYS} from '../constants';
+import {updateSettings, getSettings} from '../store/settings';
 import {getHabits, addHabit, logHabit, removeHabit, unlogHabit, getTodayCount, getStreak} from '../habits';
 
 // ─── Types ───────────────────────────────────────────────
@@ -260,11 +260,11 @@ export async function executeCommand(input: string): Promise<CommandResult> {
     // ─── Quote ───
     if (cmd === 'quote' || cmd === 'q') {
       if (!args) {
-        const q = await AsyncStorage.getItem(STORAGE_KEYS.quote);
+        const q = getSettings().quote;
         return {type: 'text', output: q ? `"${q}"` : 'no quote set', input: trimmed, timestamp: now};
       }
       const truncated = args.length > 100;
-      await AsyncStorage.setItem(STORAGE_KEYS.quote, args.slice(0, 100));
+      await updateSettings({quote: args.slice(0, 100)});
       const output = truncated ? '✓ quote updated (truncated to 100 chars)' : '✓ quote updated';
       pushHistory({input: trimmed, output, timestamp: now});
       return {type: 'text', output, input: trimmed, timestamp: now};
@@ -315,7 +315,7 @@ export async function executeCommand(input: string): Promise<CommandResult> {
     if (cmd === 'theme') {
       const themeName = (parts[1] || '').toLowerCase() as ThemeName;
       if (!themeName) {
-        const current = (await AsyncStorage.getItem(STORAGE_KEYS.theme)) || 'midnight';
+        const current = getSettings().theme;
         const output = `theme: ${current.toUpperCase()}\navailable: ${THEME_NAMES.join(' · ')}`;
         pushHistory({input: trimmed, output, timestamp: now});
         return {type: 'text', output, input: trimmed, timestamp: now};
@@ -323,8 +323,7 @@ export async function executeCommand(input: string): Promise<CommandResult> {
       if (!THEME_NAMES.includes(themeName)) {
         return {type: 'error', output: `✕ unknown: ${themeName}\navailable: ${THEME_NAMES.join(' · ')}`, input: trimmed, timestamp: now};
       }
-      await AsyncStorage.setItem(STORAGE_KEYS.theme, themeName);
-      applyTheme(themeName);
+      await updateSettings({theme: themeName});
       const output = `✓ theme → ${themeName.toUpperCase()}`;
       pushHistory({input: trimmed, output, timestamp: now});
       return {type: 'text', output, input: trimmed, timestamp: now};
@@ -334,7 +333,7 @@ export async function executeCommand(input: string): Promise<CommandResult> {
     if (cmd === 'bg' || cmd === 'background') {
       const effect = (parts[1] || '').toLowerCase() as BgEffect;
       if (!effect) {
-        const current = (await AsyncStorage.getItem(STORAGE_KEYS.bgEffect)) || 'void';
+        const current = getSettings().bgEffect;
         const output = `background: ${current.toUpperCase()}\navailable: ${BG_EFFECTS.join(' · ')}`;
         pushHistory({input: trimmed, output, timestamp: now});
         return {type: 'text', output, input: trimmed, timestamp: now};
@@ -342,7 +341,7 @@ export async function executeCommand(input: string): Promise<CommandResult> {
       if (!BG_EFFECTS.includes(effect)) {
         return {type: 'error', output: `✕ unknown: ${effect}\navailable: ${BG_EFFECTS.join(' · ')}`, input: trimmed, timestamp: now};
       }
-      await AsyncStorage.setItem(STORAGE_KEYS.bgEffect, effect);
+      await updateSettings({bgEffect: effect});
       const output = `✓ background → ${effect.toUpperCase()}`;
       pushHistory({input: trimmed, output, timestamp: now});
       return {type: 'text', output, input: trimmed, timestamp: now};
@@ -367,6 +366,9 @@ export async function executeCommand(input: string): Promise<CommandResult> {
           return {type: 'error', output: '✕ usage: habit add <name> [goal]', input: trimmed, timestamp: now};
         }
         const habit = await addHabit(habitName, goal);
+        if (!habit) {
+          return {type: 'error', output: '✕ duplicate name or max habits reached', input: trimmed, timestamp: now};
+        }
         const output = `✓ added: ${habit.name} (goal: ${goal}/day)`;
         pushHistory({input: trimmed, output, timestamp: now});
         return {type: 'text', output, input: trimmed, timestamp: now};

@@ -11,8 +11,6 @@ import AppDrawerScreen from './src/screens/AppDrawerScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import TerminalScreen from './src/screens/TerminalScreen';
 import {Colors} from './src/theme/tokens';
-import {applyTheme, THEME_NAMES, ThemeName, isLightTheme} from './src/theme/tokens';
-import {STORAGE_KEYS} from './src/constants';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import {loadSettings} from './src/store/settings';
 
@@ -78,12 +76,7 @@ const App = () => {
 
   // Load saved theme + settings store on mount
   useEffect(() => {
-    loadSettings(); // Pre-load settings store for all screens
-    AsyncStorage.getItem(STORAGE_KEYS.theme).then(saved => {
-      if (saved && THEME_NAMES.includes(saved as ThemeName)) {
-        applyTheme(saved as ThemeName);
-      }
-    }).catch(() => {});
+    loadSettings(); // Pre-load settings store (includes theme application)
   }, []);
 
   // Re-render when theme changes (updates nav container colors)

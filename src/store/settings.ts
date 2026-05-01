@@ -13,6 +13,7 @@ import {STORAGE_KEYS} from '../constants';
 import type {BgEffect} from '../constants';
 import {BG_EFFECTS} from '../constants';
 import {safeMultiGet, safeMultiSet} from './safeStorage';
+import {applyTheme, THEME_NAMES, ThemeName} from '../theme/tokens';
 
 export interface Settings {
   clockFormat: '24' | '12';
@@ -26,6 +27,7 @@ export interface Settings {
   petEnabled: boolean;
   gesturesEnabled: boolean;
   bgEffect: BgEffect;
+  theme: ThemeName;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +42,7 @@ const DEFAULT_SETTINGS: Settings = {
   petEnabled: true,
   gesturesEnabled: true,
   bgEffect: 'void',
+  theme: 'midnight',
 };
 
 // ─── In-memory cache ─────────────────────────────────────
@@ -81,6 +84,7 @@ async function _doLoad(): Promise<void> {
       STORAGE_KEYS.petEnabled,
       STORAGE_KEYS.gesturesEnabled,
       STORAGE_KEYS.bgEffect,
+      STORAGE_KEYS.theme,
     ];
     const m = await safeMultiGet(keys);
 
@@ -116,6 +120,12 @@ async function _doLoad(): Promise<void> {
 
     const bg = m.get(STORAGE_KEYS.bgEffect);
     if (bg && BG_EFFECTS.includes(bg as BgEffect)) _settings.bgEffect = bg as BgEffect;
+
+    const th = m.get(STORAGE_KEYS.theme);
+    if (th && THEME_NAMES.includes(th as ThemeName)) {
+      _settings.theme = th as ThemeName;
+      applyTheme(th as ThemeName);
+    }
   } catch (_) {}
   _loaded = true;
 }
@@ -167,6 +177,11 @@ export async function updateSettings(partial: Partial<Settings>): Promise<void> 
   if (partial.bgEffect !== undefined) {
     _settings.bgEffect = partial.bgEffect;
     pairs.push([STORAGE_KEYS.bgEffect, partial.bgEffect]);
+  }
+  if (partial.theme !== undefined) {
+    _settings.theme = partial.theme;
+    pairs.push([STORAGE_KEYS.theme, partial.theme]);
+    applyTheme(partial.theme);
   }
 
   if (pairs.length > 0) {

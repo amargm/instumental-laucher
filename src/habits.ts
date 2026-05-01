@@ -1,6 +1,8 @@
 import {safeGet, safeSet, safeJsonParse} from './store/safeStorage';
 
 const HABITS_KEY = '@habits_data';
+const MAX_HABITS = 20;
+const LOG_RETENTION_DAYS = 90; // Prune logs older than this
 
 // ─── Write queue: prevents concurrent read-modify-write races ───
 let writeQueue: Promise<any> = Promise.resolve();
@@ -40,12 +42,36 @@ function dateKey(daysAgo: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Prune log entries older than LOG_RETENTION_DAYS to prevent unbounded growth */
+function pruneOldLogs(data: HabitData): void {
+  const cutoffDate = dateKey(LOG_RETENTION_DAYS);
+  for (const habitId of Object.keys(data.logs)) {
+    const habitLogs = data.logs[habitId];
+    if (!habitLogs) continue;
+    for (const date of Object.keys(habitLogs)) {
+      if (date < cutoffDate) {
+        delete habitLogs[date];
+      }
+    }
+  }
+}
+
 async function load(): Promise<HabitData> {
   const raw = await safeGet(HABITS_KEY);
-  return safeJsonParse(raw, {habits: [], logs: {}});
+  const data = safeJsonParse<HabitData>(raw, {habits: [], logs: {}});
+  // Ensure structural integrity
+  if (!Array.isArray(data.habits)) data.habits = [];
+  if (!data.logs || typeof data.logs !== 'object') data.logs = {};
+  // Remove orphan logs (logs for habits that no longer exist)
+  const habitIds = new Set(data.habits.map(h => h.id));
+  for (const logId of Object.keys(data.logs)) {
+    if (!habitIds.has(logId)) delete data.logs[logId];
+  }
+  return data;
 }
 
 async function save(data: HabitData): Promise<void> {
+  pruneOldLogs(data);
   await safeSet(HABITS_KEY, JSON.stringify(data));
 }
 
@@ -53,13 +79,25 @@ export async function getHabits(): Promise<HabitData> {
   return load();
 }
 
-export async function addHabit(name: string, goal: number = 1): Promise<Habit> {
+export async function addHabit(name: string, goal: number = 1): Promise<Habit | null> {
   return serialized(async () => {
     const data = await load();
+    // Validate name
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 50) return null;
+    // Prevent duplicate names (case-insensitive)
+    const exists = data.habits.some(
+      h => h.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (exists) return null;
+    // Cap total habits
+    if (data.habits.length >= MAX_HABITS) return null;
+    // Validate goal (must be positive integer)
+    const safeGoal = Math.max(1, Math.min(999, Math.round(goal)));
     const id = `h_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const habit: Habit = {id, name: name.toUpperCase(), goal, createdAt: Date.now()};
+    const habit: Habit = {id, name: trimmed.toUpperCase(), goal: safeGoal, createdAt: Date.now()};
     data.habits.push(habit);
-    if (!data.logs[id]) data.logs[id] = {};
+    data.logs[id] = {};
     await save(data);
     return habit;
   });
@@ -88,7 +126,14 @@ export async function logHabit(idOrName: string, count: number = 1): Promise<{ha
     if (!habit) return null;
     const today = todayKey();
     if (!data.logs[habit.id]) data.logs[habit.id] = {};
-    data.logs[habit.id][today] = (data.logs[habit.id][today] || 0) + count;
+    const current = data.logs[habit.id][today] || 0;
+    // Cap at 3x goal to prevent accidental spam (e.g. goal=5, max log=15)
+    const maxCount = habit.goal * 3;
+    if (current >= maxCount) {
+      return {habit, today: current};
+    }
+    const safeCount = Math.max(0, Math.min(count, maxCount - current));
+    data.logs[habit.id][today] = current + safeCount;
     await save(data);
     return {habit, today: data.logs[habit.id][today]};
   });
@@ -104,7 +149,8 @@ export async function unlogHabit(idOrName: string): Promise<{habit: Habit; today
     const today = todayKey();
     if (!data.logs[habit.id]) data.logs[habit.id] = {};
     const current = data.logs[habit.id][today] || 0;
-    data.logs[habit.id][today] = Math.max(0, current - 1);
+    if (current <= 0) return {habit, today: 0};
+    data.logs[habit.id][today] = current - 1;
     await save(data);
     return {habit, today: data.logs[habit.id][today]};
   });
@@ -115,10 +161,12 @@ export function getTodayCount(logs: HabitLog, habitId: string): number {
 }
 
 export function getStreak(logs: HabitLog, habit: Habit): number {
+  if (!habit || habit.goal <= 0) return 0;
   let streak = 0;
-  // Check today first — if not logged today, start from yesterday
   const todayCount = logs[habit.id]?.[todayKey()] || 0;
-  const startOffset = todayCount >= habit.goal ? 0 : 1;
+  const todayDone = todayCount >= habit.goal;
+  // Start from yesterday if today not yet completed
+  const startOffset = todayDone ? 0 : 1;
   for (let i = startOffset; i < 365; i++) {
     const key = dateKey(i);
     const count = logs[habit.id]?.[key] || 0;
@@ -128,8 +176,6 @@ export function getStreak(logs: HabitLog, habit: Habit): number {
       break;
     }
   }
-  // If today is already completed, include it
-  if (startOffset === 0) streak++;
   return streak;
 }
 
