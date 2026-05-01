@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
+import {applyTheme, THEME_NAMES, ThemeName} from '../theme/tokens';
 import {getBatteryInfo, isNotificationAccessGranted, openNotificationListenerSettings, isDefaultLauncher, openDefaultLauncherChooser} from '../native/DeviceInfo';
 import {openSystemSettings, getInstalledApps, AppInfo} from '../native/InstalledApps';
 
@@ -20,8 +21,12 @@ interface Props {
 }
 
 import {STORAGE_KEYS} from '../constants';
+import type {BgEffect} from '../constants';
+import {BG_EFFECTS} from '../constants';
 import {tick, impact} from '../native/Haptics';
 import {NavItem} from '../components/NavItem';
+import {useTheme} from '../hooks/useTheme';
+import {useBackToHome} from '../hooks/useBackToHome';
 
 const ACCENT_COLORS = [
   '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96E6A1',
@@ -29,6 +34,8 @@ const ACCENT_COLORS = [
 ];
 
 const SettingsScreen: React.FC<Props> = ({navigation}) => {
+  useTheme(); // re-render on theme change
+  const [ready, setReady] = useState(false);
   const [gesturesEnabled, setGesturesEnabled] = useState(true);
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
@@ -45,6 +52,8 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [showAppPicker, setShowAppPicker] = useState(false);
   const [showDockPicker, setShowDockPicker] = useState(false);
   const [allApps, setAllApps] = useState<AppInfo[]>([]);
+  const [bgEffect, setBgEffect] = useState<BgEffect>('void');
+  const [currentTheme, setCurrentTheme] = useState<ThemeName>('midnight');
 
   // Load persisted settings — single multiGet to avoid sequential renders
   useEffect(() => {
@@ -61,6 +70,8 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
           STORAGE_KEYS.parallaxEnabled,
           STORAGE_KEYS.rainEnabled,
           STORAGE_KEYS.petEnabled,
+          STORAGE_KEYS.bgEffect,
+          STORAGE_KEYS.theme,
         ];
         const results = await AsyncStorage.multiGet(keys);
         const map = new Map(results);
@@ -85,7 +96,15 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         if (rain !== null && rain !== undefined) setRainEnabled(rain === 'true');
         const pet = map.get(STORAGE_KEYS.petEnabled);
         if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
+        const bg = map.get(STORAGE_KEYS.bgEffect);
+        if (bg && BG_EFFECTS.includes(bg as BgEffect)) setBgEffect(bg as BgEffect);
+        const th = map.get(STORAGE_KEYS.theme);
+        if (th && THEME_NAMES.includes(th as ThemeName)) {
+          setCurrentTheme(th as ThemeName);
+          applyTheme(th as ThemeName);
+        }
       } catch (e) {}
+      setReady(true);
     };
     loadSettings();
   }, []);
@@ -132,6 +151,21 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     };
     loadApps();
   }, []);
+
+  // Centralized back handling — close pickers first, or go Home
+  const showAppPickerRef = useRef(false);
+  const showDockPickerRef = useRef(false);
+  showAppPickerRef.current = showAppPicker;
+  showDockPickerRef.current = showDockPicker;
+  const handleBack = useCallback(() => {
+    if (showAppPickerRef.current || showDockPickerRef.current) {
+      setShowAppPicker(false);
+      setShowDockPicker(false);
+      return true;
+    }
+    return false;
+  }, []);
+  useBackToHome(navigation, handleBack);
 
   const safeSave = async (key: string, value: string) => {
     try { await AsyncStorage.setItem(key, value); } catch (e) {}
@@ -207,6 +241,23 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     tick();
     setPetEnabled(value);
     safeSave(STORAGE_KEYS.petEnabled, String(value));
+  };
+
+  const cycleBgEffect = () => {
+    tick();
+    const idx = BG_EFFECTS.indexOf(bgEffect);
+    const next = BG_EFFECTS[(idx + 1) % BG_EFFECTS.length];
+    setBgEffect(next);
+    safeSave(STORAGE_KEYS.bgEffect, next);
+  };
+
+  const cycleTheme = () => {
+    tick();
+    const idx = THEME_NAMES.indexOf(currentTheme);
+    const next = THEME_NAMES[(idx + 1) % THEME_NAMES.length];
+    setCurrentTheme(next);
+    applyTheme(next);
+    safeSave(STORAGE_KEYS.theme, next);
   };
 
   if (showAppPicker) {
@@ -311,12 +362,16 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     );
   }
 
+  if (!ready) {
+    return <SafeAreaView style={styles.container} />;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>CONFIGURATION</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => { try { navigation.navigate('Home'); } catch (e) {} }}>
           <Text style={styles.closeBtn}>✕</Text>
         </TouchableOpacity>
       </View>
@@ -325,6 +380,17 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
         {/* Display */}
         <Text style={styles.groupLabel}>DISPLAY</Text>
+
+        <TouchableOpacity style={styles.settingItem} activeOpacity={0.7} onPress={cycleTheme}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>◐</Text>
+            <View>
+              <Text style={styles.settingName}>Theme</Text>
+              <Text style={styles.settingDesc}>Full color scheme preset</Text>
+            </View>
+          </View>
+          <Text style={styles.settingValue}>{currentTheme.toUpperCase()}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.settingItem}
@@ -501,6 +567,17 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
           />
         </View>
 
+        <TouchableOpacity style={styles.settingItem} activeOpacity={0.7} onPress={cycleBgEffect}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>▦</Text>
+            <View>
+              <Text style={styles.settingName}>Background</Text>
+              <Text style={styles.settingDesc}>Animated wallpaper effect</Text>
+            </View>
+          </View>
+          <Text style={styles.settingValue}>{bgEffect.toUpperCase()}</Text>
+        </TouchableOpacity>
+
         {/* Permissions */}
         <Text style={styles.groupLabel}>PERMISSIONS</Text>
 
@@ -659,30 +736,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.surface2,
   },
   title: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 14,
+    color: Colors.textPrimary,
     letterSpacing: 3,
   },
   closeBtn: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textMuted,
     padding: Spacing.sm,
   },
   list: {
     flex: 1,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   groupLabel: {
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
     color: Colors.textMuted,
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     marginTop: Spacing.xl,
     marginBottom: Spacing.sm,
   },
@@ -692,7 +771,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.surface2,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -701,57 +780,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingIcon: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    width: 20,
+    fontSize: 13,
+    color: Colors.textMuted,
+    width: 18,
     textAlign: 'center',
   },
   settingName: {
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 13,
     color: Colors.textPrimary,
     letterSpacing: 0.3,
   },
   settingDesc: {
-    fontSize: 11,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 10,
     color: Colors.textMuted,
     marginTop: 2,
+    letterSpacing: 0.3,
   },
   settingValue: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textSecondary,
+    letterSpacing: 0.5,
   },
   settingValueActive: {
     color: Colors.success,
   },
   quoteInput: {
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 12,
     color: Colors.textPrimary,
     marginTop: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
-    fontFamily: 'monospace',
+    borderRadius: 0,
   },
   colorRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     marginTop: 8,
   },
   colorDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 0,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   colorDotActive: {
     borderColor: Colors.textPrimary,
-    transform: [{scale: 1.2}],
+    transform: [{scale: 1.15}],
   },
   bottomNav: {
     flexDirection: 'row',
@@ -764,16 +847,16 @@ const styles = StyleSheet.create({
   // App Picker
   appPickerList: {
     flex: 1,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   appPickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    height: 56,
+    height: 52,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.surface2,
   },
   appPickerItemSelected: {
     backgroundColor: Colors.surface,
@@ -791,7 +874,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     backgroundColor: Colors.surface2,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -799,21 +882,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
   },
   appPickerLetter: {
-    fontFamily: 'monospace',
-    fontSize: 14,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 13,
     color: Colors.textPrimary,
   },
   appPickerName: {
-    fontSize: 13,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 12,
     color: Colors.textPrimary,
     flex: 1,
+    letterSpacing: 0.3,
   },
   appPickerNameSelected: {
     fontWeight: '600',
   },
   appPickerCheck: {
-    fontSize: 16,
-    color: Colors.textSecondary,
+    fontSize: 14,
+    color: Colors.textMuted,
   },
   appPickerCheckSelected: {
     color: Colors.textPrimary,
@@ -824,20 +909,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
   },
   guideSection: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 8,
-    color: Colors.textSecondary,
+    color: Colors.textMuted,
     letterSpacing: 2,
     marginTop: Spacing.md,
     marginBottom: 2,
   },
   guideItem: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
     letterSpacing: 0.3,
     lineHeight: 18,
   },

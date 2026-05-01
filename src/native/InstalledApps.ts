@@ -17,10 +17,30 @@ export async function getInstalledApps(): Promise<AppInfo[]> {
 }
 
 /**
- * Get a single app's icon as base64 PNG (lazy load).
+ * Get a single app's icon as base64 PNG (lazy load with in-memory cache).
+ * Cache holds up to 200 icons — LRU eviction when full.
  */
+const _iconCache = new Map<string, string>();
+const ICON_CACHE_MAX = 200;
+
 export async function getAppIcon(packageName: string): Promise<string> {
-  return InstalledApps.getAppIcon(packageName);
+  const cached = _iconCache.get(packageName);
+  if (cached !== undefined) return cached;
+
+  const icon: string = await InstalledApps.getAppIcon(packageName);
+
+  // Evict oldest entries if cache is full
+  if (_iconCache.size >= ICON_CACHE_MAX) {
+    const firstKey = _iconCache.keys().next().value;
+    if (firstKey) _iconCache.delete(firstKey);
+  }
+  _iconCache.set(packageName, icon);
+  return icon;
+}
+
+/** Clear icon cache (e.g., on app install/uninstall). */
+export function clearIconCache(): void {
+  _iconCache.clear();
 }
 
 /**

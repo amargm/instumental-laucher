@@ -58,9 +58,9 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
             // WiFi name (SSID) — requires location permission on Android 8.1+
             if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
                 try {
-                    val wm = reactApplicationContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                    val info = wm.connectionInfo
-                    result.putString("wifiName", info.ssid?.replace("\"", "") ?: "")
+                    val wm = reactApplicationContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                    val info = wm?.connectionInfo
+                    result.putString("wifiName", info?.ssid?.replace("\"", "") ?: "")
                 } catch (e: Exception) {
                     result.putString("wifiName", "")
                 }

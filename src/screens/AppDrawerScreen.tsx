@@ -6,7 +6,6 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
-  BackHandler,
   ScrollView,
   Image,
   Animated,
@@ -23,12 +22,15 @@ import {
   uninstallApp,
   AppInfo,
   InstalledAppsEvents,
+  clearIconCache,
 } from '../native/InstalledApps';
 import {isHeadphonesConnected} from '../native/DeviceInfo';
 import {APP_ICON_MAP} from '../components/AppIcons';
 import {impact, heavy} from '../native/Haptics';
 import {MUSIC_KEYWORDS} from '../constants';
 import {NavItem} from '../components/NavItem';
+import {useTheme} from '../hooks/useTheme';
+import {useBackToHome} from '../hooks/useBackToHome';
 
 // Module-level cache so apps persist between navigations
 let cachedApps: AppInfo[] = [];
@@ -98,8 +100,10 @@ interface Props {
 }
 
 const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
+  useTheme(); // re-render on theme change
   const [searchQuery, setSearchQuery] = useState('');
   const [searchVisible, setSearchVisible] = useState(false);
+  const searchVisibleRef = useRef(false);
   const [apps, setApps] = useState<AppInfo[]>(cachedApps);
   const [loading, setLoading] = useState(cachedApps.length === 0);
   const [headphonesConnected, setHeadphonesConnected] = useState(false);
@@ -118,25 +122,13 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     // Listen for app install/uninstall
     const sub = InstalledAppsEvents.addListener('onAppsChanged', () => {
       cachedApps = [];
+      clearIconCache();
       loadApps();
     });
     // Single smooth fade-in for entire list (no per-item stagger)
     Animated.timing(listFadeAnim, {toValue: 1, duration: 200, useNativeDriver: true}).start();
     return () => sub.remove();
   }, []);
-
-  // Disable back button — launcher should not go "back"
-  useEffect(() => {
-    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (searchVisible) {
-        hideSearch();
-        return true;
-      }
-      navigation.navigate('Home');
-      return true;
-    });
-    return () => handler.remove();
-  }, [navigation, searchVisible]);
 
   const loadApps = useCallback(async () => {
     try {
@@ -159,6 +151,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 
   const showSearch = () => {
     setSearchVisible(true);
+    searchVisibleRef.current = true;
     setTimeout(() => searchInputRef.current?.focus(), 100);
   };
 
@@ -167,7 +160,18 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     setSearchQuery('');
     setActiveFilter(null);
     setSearchVisible(false);
+    searchVisibleRef.current = false;
   };
+
+  // Centralized back handling — close search on back, or go Home
+  const handleBack = useCallback(() => {
+    if (searchVisibleRef.current) {
+      hideSearch();
+      return true; // handled — don't navigate Home
+    }
+    return false;
+  }, []);
+  useBackToHome(navigation, handleBack);
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
@@ -225,7 +229,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       Animated.timing(launchScale, {toValue: 1.04, duration: 150, useNativeDriver: true}),
       Animated.timing(launchOpacity, {toValue: 0, duration: 150, useNativeDriver: true}),
     ]).start(() => {
-      launchApp(packageName).catch(e => console.warn('Failed to launch:', packageName, e));
+      launchApp(packageName).catch(() => {});
     });
   }, [launchScale, launchOpacity]);
 
@@ -447,21 +451,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surface2,
   },
   title: {
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 14,
+    color: Colors.textPrimary,
     letterSpacing: 3,
   },
   searchToggle: {
     padding: Spacing.sm,
-    paddingHorizontal: Spacing.base,
+    paddingHorizontal: Spacing.md,
   },
   searchToggleText: {
-    fontSize: 18,
+    fontSize: 16,
     color: Colors.textMuted,
   },
   searchWrap: {
@@ -471,102 +478,103 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
-    paddingHorizontal: Spacing.base,
+    borderRadius: 0,
+    paddingHorizontal: Spacing.md,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     color: Colors.textPrimary,
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 13,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   searchClose: {
     padding: 6,
   },
   searchCloseText: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textMuted,
   },
   filterRow: {
     flexGrow: 0,
     flexShrink: 0,
-    height: 40,
-    paddingHorizontal: Spacing.xl,
+    height: 38,
+    paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
   },
   filterContent: {
     gap: 6,
     alignItems: 'center',
-    paddingRight: Spacing.xl,
+    paddingRight: Spacing.lg,
   },
   filterChip: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
-    backgroundColor: Colors.surface,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
   },
   filterChipActive: {
-    borderColor: Colors.textSecondary,
-    backgroundColor: Colors.surface2,
+    borderColor: Colors.textPrimary,
+    backgroundColor: Colors.surface,
   },
   filterLabel: {
-    fontSize: 10,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 9,
     color: Colors.textMuted,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   filterLabelActive: {
     color: Colors.textPrimary,
   },
   appCount: {
-    fontSize: 10,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 9,
     color: Colors.textMuted,
-    letterSpacing: 2,
-    paddingHorizontal: Spacing.xl,
+    letterSpacing: 2.5,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },
   list: {
     flex: 1,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   appItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.surface2,
   },
   appIcon: {
     width: 36,
     height: 36,
-    backgroundColor: Colors.surface2,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   appIconText: {
-    fontFamily: 'monospace',
-    fontSize: 14,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 13,
     color: Colors.textPrimary,
-    fontWeight: '500',
   },
   appIconImg: {
-    width: 24,
-    height: 24,
-    borderRadius: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 0,
   },
   appInfo: {
     flex: 1,
   },
   appName: {
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 13,
-    fontWeight: '500',
     color: Colors.textPrimary,
     letterSpacing: 0.3,
   },
@@ -583,13 +591,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textMuted,
+    letterSpacing: 0.5,
   },
   contextOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(10,10,10,0.9)',
+    backgroundColor: 'rgba(10,10,10,0.95)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -598,26 +607,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sm,
+    borderRadius: 0,
     padding: Spacing.md,
   },
   contextTitle: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
     color: Colors.textPrimary,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     marginBottom: Spacing.md,
     textAlign: 'center',
   },
   contextItem: {
     paddingVertical: Spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surface2,
     alignItems: 'center',
   },
   contextLabel: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textPrimary,
     letterSpacing: 1.5,
   },

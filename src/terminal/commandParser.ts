@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {APP_CACHE_TTL} from '../constants';
+import type {BgEffect} from '../constants';
+import {BG_EFFECTS} from '../constants';
+import {applyTheme, THEME_NAMES, ThemeName} from '../theme/tokens';
 import {getBatteryInfo, getConnectivityInfo, isHeadphonesConnected} from '../native/DeviceInfo';
 import {getInstalledApps, launchApp, AppInfo, openSystemSettings} from '../native/InstalledApps';
 import {
@@ -10,6 +13,7 @@ import {
   openLocationSettings,
 } from '../native/DeviceInfo';
 import {STORAGE_KEYS} from '../constants';
+import {getHabits, addHabit, logHabit, removeHabit, unlogHabit, getTodayCount, getStreak} from '../habits';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -35,6 +39,8 @@ const MAX_HISTORY = 30;
 
 let appCache: AppInfo[] = [];
 let cacheTime = 0;
+// Module-level controller for weather fetch — cancels previous on new request
+let weatherController: AbortController | null = null;
 
 async function ensureAppCache(): Promise<AppInfo[]> {
   if (appCache.length === 0 || Date.now() - cacheTime > APP_CACHE_TTL) {
@@ -144,7 +150,10 @@ export async function executeCommand(input: string): Promise<CommandResult> {
     // ─── Weather ───
     if (cmd === 'w' || cmd === 'weather') {
       try {
-        const controller = new AbortController();
+        // Cancel any previous in-flight weather request
+        weatherController?.abort();
+        weatherController = new AbortController();
+        const controller = weatherController;
         const timeout = setTimeout(() => controller.abort(), 5000);
         const res = await fetch('https://wttr.in/?format=%t|%C|%h|%w', {signal: controller.signal});
         clearTimeout(timeout);
@@ -302,6 +311,137 @@ export async function executeCommand(input: string): Promise<CommandResult> {
       return {type: 'text', output: '→ location settings', input: trimmed, timestamp: now};
     }
 
+    // ─── Theme ───
+    if (cmd === 'theme') {
+      const themeName = (parts[1] || '').toLowerCase() as ThemeName;
+      if (!themeName) {
+        const current = (await AsyncStorage.getItem(STORAGE_KEYS.theme)) || 'midnight';
+        const output = `theme: ${current.toUpperCase()}\navailable: ${THEME_NAMES.join(' · ')}`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+      if (!THEME_NAMES.includes(themeName)) {
+        return {type: 'error', output: `✕ unknown: ${themeName}\navailable: ${THEME_NAMES.join(' · ')}`, input: trimmed, timestamp: now};
+      }
+      await AsyncStorage.setItem(STORAGE_KEYS.theme, themeName);
+      applyTheme(themeName);
+      const output = `✓ theme → ${themeName.toUpperCase()}`;
+      pushHistory({input: trimmed, output, timestamp: now});
+      return {type: 'text', output, input: trimmed, timestamp: now};
+    }
+
+    // ─── Background effect ───
+    if (cmd === 'bg' || cmd === 'background') {
+      const effect = (parts[1] || '').toLowerCase() as BgEffect;
+      if (!effect) {
+        const current = (await AsyncStorage.getItem(STORAGE_KEYS.bgEffect)) || 'void';
+        const output = `background: ${current.toUpperCase()}\navailable: ${BG_EFFECTS.join(' · ')}`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+      if (!BG_EFFECTS.includes(effect)) {
+        return {type: 'error', output: `✕ unknown: ${effect}\navailable: ${BG_EFFECTS.join(' · ')}`, input: trimmed, timestamp: now};
+      }
+      await AsyncStorage.setItem(STORAGE_KEYS.bgEffect, effect);
+      const output = `✓ background → ${effect.toUpperCase()}`;
+      pushHistory({input: trimmed, output, timestamp: now});
+      return {type: 'text', output, input: trimmed, timestamp: now};
+    }
+
+    // ─── Habit ───
+    if (cmd === 'habit' || cmd === 'habits') {
+      const subCmd = parts[1]?.toLowerCase();
+
+      // habit add <name> [goal]
+      if (subCmd === 'add' || subCmd === 'new') {
+        const nameParts = parts.slice(2);
+        // Check if last part is a number (goal)
+        const lastPart = nameParts[nameParts.length - 1];
+        let goal = 1;
+        let habitName = nameParts.join(' ');
+        if (lastPart && /^\d+$/.test(lastPart) && nameParts.length > 1) {
+          goal = parseInt(lastPart, 10);
+          habitName = nameParts.slice(0, -1).join(' ');
+        }
+        if (!habitName.trim()) {
+          return {type: 'error', output: '✕ usage: habit add <name> [goal]', input: trimmed, timestamp: now};
+        }
+        const habit = await addHabit(habitName, goal);
+        const output = `✓ added: ${habit.name} (goal: ${goal}/day)`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+
+      // habit del/delete/rm <name>
+      if (subCmd === 'del' || subCmd === 'delete' || subCmd === 'rm') {
+        const target = parts.slice(2).join(' ');
+        if (!target) {
+          return {type: 'error', output: '✕ usage: habit del <name>', input: trimmed, timestamp: now};
+        }
+        const removed = await removeHabit(target);
+        if (!removed) {
+          return {type: 'error', output: `✕ not found: ${target}`, input: trimmed, timestamp: now};
+        }
+        const output = `✓ removed: ${target.toUpperCase()}`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+
+      // habit log <name>
+      if (subCmd === 'log' || subCmd === 'done' || subCmd === '+') {
+        const target = parts.slice(2).join(' ');
+        if (!target) {
+          return {type: 'error', output: '✕ usage: habit log <name>', input: trimmed, timestamp: now};
+        }
+        const result = await logHabit(target);
+        if (!result) {
+          return {type: 'error', output: `✕ not found: ${target}`, input: trimmed, timestamp: now};
+        }
+        const {habit, today} = result;
+        const done = today >= habit.goal;
+        const bar = '█'.repeat(Math.min(10, Math.round((today / habit.goal) * 10))) + '░'.repeat(Math.max(0, 10 - Math.round((today / habit.goal) * 10)));
+        const output = `${habit.name} · ${bar} ${today}/${habit.goal}${done ? ' ✓ DONE' : ''}`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+
+      // habit undo <name>
+      if (subCmd === 'undo' || subCmd === '-') {
+        const target = parts.slice(2).join(' ');
+        if (!target) {
+          return {type: 'error', output: '✕ usage: habit undo <name>', input: trimmed, timestamp: now};
+        }
+        const result = await unlogHabit(target);
+        if (!result) {
+          return {type: 'error', output: `✕ not found: ${target}`, input: trimmed, timestamp: now};
+        }
+        const {habit, today} = result;
+        const output = `✓ undone · ${habit.name} ${today}/${habit.goal}`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+
+      // Default: list all habits with streaks
+      const data = await getHabits();
+      if (data.habits.length === 0) {
+        const output = 'no habits yet\n\n  habit add <name> [goal]   create one';
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+      const lines = data.habits.map(h => {
+        const today = getTodayCount(data.logs, h.id);
+        const streak = getStreak(data.logs, h);
+        const pct = Math.min(1, today / h.goal);
+        const bar = '█'.repeat(Math.round(pct * 10)) + '░'.repeat(10 - Math.round(pct * 10));
+        const done = today >= h.goal ? ' ✓' : '';
+        const streakStr = streak > 0 ? ` 🔥${streak}d` : '';
+        return `${h.name.padEnd(12)} ${bar} ${today}/${h.goal}${done}${streakStr}`;
+      });
+      const output = 'HABITS\n─────────────\n' + lines.join('\n');
+      pushHistory({input: trimmed, output, timestamp: now});
+      return {type: 'text', output, input: trimmed, timestamp: now};
+    }
+
     // ─── Help ───
     if (cmd === 'help' || cmd === '?') {
       const output = [
@@ -322,6 +462,12 @@ export async function executeCommand(input: string): Promise<CommandResult> {
         '  dnd           do not disturb',
         '  display       display settings',
         '  gps           location settings',
+        '  bg [mode]     background (void/matrix/static/grid)',
+        '  theme [name]  color scheme (midnight/amber/phosphor/solarized/snow)',
+        '  habit         list habits + streaks',
+        '  habit add <n> create habit (goal optional: habit add water 8)',
+        '  habit log <n> log progress on a habit',
+        '  habit del <n> delete a habit',
         '  clear         clear results & history',
         '  help          this message',
       ].join('\n');

@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback, useRef, memo} from 'react';
+import React, {useState, useEffect, useCallback, useRef, useMemo, memo} from 'react';
 import {
   View,
   Text,
@@ -25,16 +25,21 @@ import ReanimatedAnimated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import {Colors, Spacing, Radius} from '../theme/tokens';
+import {Colors, Spacing, Radius, isLightTheme} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
 import {getConnectedAudioDevice, AudioDeviceInfo} from '../native/DeviceInfo';
 import {STORAGE_KEYS, MUSIC_KEYWORDS, AUDIO_POLL_INTERVAL, WEATHER_REFRESH_INTERVAL, PET_FEED_GAP, PET_SPAM_THRESHOLD} from '../constants';
+import type {BgEffect} from '../constants';
+import {BG_EFFECTS} from '../constants';
 import {useAppActive} from '../hooks/useAppActive';
+import {useTheme} from '../hooks/useTheme';
 import {tick, impact, heavy} from '../native/Haptics';
 import {
   SettingsIcon,
 } from '../components/AppIcons';
 import {APP_ICON_MAP} from '../components/AppIcons';
+import BackgroundEffect from '../components/BackgroundEffects';
+import {HabitWidget} from '../components/HabitWidget';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -65,47 +70,32 @@ const RainDrop = memo(({delay, accentColor, active}: {delay: number; accentColor
   const fallAnim = useRef(new Animated.Value(-20)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const x = useRef(Math.random() * SCREEN_WIDTH).current;
-  const mountedRef = useRef(true);
-  const activeRef = useRef(active);
-  activeRef.current = active;
 
+  // Single loop controller — pauses when !active, resumes with stagger delay
   useEffect(() => {
+    if (!active) {
+      fallAnim.stopAnimation();
+      return;
+    }
+    let cancelled = false;
     const startDrop = () => {
-      if (!mountedRef.current || !activeRef.current) return;
+      if (cancelled) return;
       fallAnim.setValue(-20);
       opacity.setValue(0.3 + Math.random() * 0.4);
       Animated.timing(fallAnim, {
         toValue: SCREEN_HEIGHT,
         duration: 2000 + Math.random() * 2000,
         useNativeDriver: true,
-      }).start(() => startDrop());
+      }).start(({finished}) => {
+        if (finished && !cancelled) startDrop();
+      });
     };
     const timeout = setTimeout(startDrop, delay);
     return () => {
-      mountedRef.current = false;
+      cancelled = true;
       clearTimeout(timeout);
       fallAnim.stopAnimation();
     };
-  }, []);
-
-  // Pause/resume when app goes background/foreground
-  useEffect(() => {
-    if (active) {
-      // Resume: restart the loop
-      const startDrop = () => {
-        if (!mountedRef.current || !activeRef.current) return;
-        fallAnim.setValue(-20);
-        opacity.setValue(0.3 + Math.random() * 0.4);
-        Animated.timing(fallAnim, {
-          toValue: SCREEN_HEIGHT,
-          duration: 2000 + Math.random() * 2000,
-          useNativeDriver: true,
-        }).start(() => startDrop());
-      };
-      startDrop();
-    } else {
-      fallAnim.stopAnimation();
-    }
   }, [active]);
 
   const char = RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)];
@@ -366,6 +356,7 @@ interface Props {
 
 const HomeScreen: React.FC<Props> = ({navigation}) => {
   const appActive = useAppActive();
+  const {theme: _theme} = useTheme(); // triggers re-render on theme change
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
@@ -380,6 +371,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [petEnabled, setPetEnabled] = useState(true);
   const [petHealth, setPetHealth] = useState(50);
   const [gesturesEnabled, setGesturesEnabled] = useState(true);
+  const [bgEffect, setBgEffect] = useState<BgEffect>('void');
   const [showHints, setShowHints] = useState(false);
   const [audioDevice, setAudioDevice] = useState<AudioDeviceInfo>({connected: false, name: '', type: 'none'});
   const [musicAppsOpen, setMusicAppsOpen] = useState(false);
@@ -393,6 +385,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const clockAnim = useRef(new Animated.Value(0)).current;
   const weatherAnim = useRef(new Animated.Value(0)).current;
   const quoteAnim = useRef(new Animated.Value(0)).current;
+  const habitAnim = useRef(new Animated.Value(0)).current;
   const petAnim = useRef(new Animated.Value(0)).current;
   const quickAppsAnim = useRef(new Animated.Value(0)).current;
   const dockSlide = useRef(new Animated.Value(40)).current;
@@ -405,7 +398,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   // Debounced navigation to prevent double-fires
   const navigateTo = useCallback((screen: string) => {
     const now = Date.now();
-    if (now - lastNavRef.current < 500) return;
+    if (now - lastNavRef.current < 100) return;
     lastNavRef.current = now;
     navigation.navigate(screen);
   }, [navigation]);
@@ -427,12 +420,14 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       Animated.timing(anim, {toValue: 1, duration: 150, useNativeDriver: true});
     const pause = (ms: number) =>
       Animated.delay(ms);
-    Animated.sequence([
+    const seq = Animated.sequence([
       fadeIn(clockAnim),
       pause(30),
       fadeIn(weatherAnim),
       pause(30),
       fadeIn(quoteAnim),
+      pause(30),
+      fadeIn(habitAnim),
       pause(30),
       fadeIn(petAnim),
       pause(30),
@@ -441,8 +436,12 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         Animated.spring(dockSlide, {toValue: 0, useNativeDriver: true, friction: 10, tension: 60}),
         Animated.timing(dockOpacity, {toValue: 1, duration: 200, useNativeDriver: true}),
       ]),
-    ]).start();
-    return () => { mountedRef.current = false; };
+    ]);
+    seq.start();
+    return () => {
+      mountedRef.current = false;
+      seq.stop();
+    };
   }, []);
 
   // Disable back button
@@ -471,6 +470,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           STORAGE_KEYS.dockApps, STORAGE_KEYS.accentColor, STORAGE_KEYS.glitchEnabled,
           STORAGE_KEYS.parallaxEnabled, STORAGE_KEYS.rainEnabled, STORAGE_KEYS.petEnabled,
           STORAGE_KEYS.gesturesEnabled, STORAGE_KEYS.hintsDismissed,
+          STORAGE_KEYS.bgEffect,
         ];
         const entries = await AsyncStorage.multiGet(keys);
         const m = new Map(entries);
@@ -496,6 +496,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (ge !== null && ge !== undefined) { setGesturesEnabled(ge === 'true'); gesturesRef.current = ge === 'true'; }
         const hintsDismissed = m.get(STORAGE_KEYS.hintsDismissed);
         if (!hintsDismissed) setShowHints(true);
+        const bg = m.get(STORAGE_KEYS.bgEffect);
+        if (bg && BG_EFFECTS.includes(bg as BgEffect)) setBgEffect(bg as BgEffect);
       } catch (e) {}
     };
     loadSettings();
@@ -536,7 +538,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           STORAGE_KEYS.clockFormat, STORAGE_KEYS.quote, STORAGE_KEYS.quickApps,
           STORAGE_KEYS.dockApps, STORAGE_KEYS.accentColor, STORAGE_KEYS.glitchEnabled,
           STORAGE_KEYS.parallaxEnabled, STORAGE_KEYS.rainEnabled, STORAGE_KEYS.petEnabled,
-          STORAGE_KEYS.gesturesEnabled,
+          STORAGE_KEYS.gesturesEnabled, STORAGE_KEYS.bgEffect,
         ];
         const entries = await AsyncStorage.multiGet(keys);
         const m = new Map(entries);
@@ -560,6 +562,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
         const ge = m.get(STORAGE_KEYS.gesturesEnabled);
         if (ge !== null && ge !== undefined) { setGesturesEnabled(ge === 'true'); gesturesRef.current = ge === 'true'; }
+        const bg = m.get(STORAGE_KEYS.bgEffect);
+        if (bg && BG_EFFECTS.includes(bg as BgEffect)) setBgEffect(bg as BgEffect);
       } catch (e) {}
     });
     return unsubscribe;
@@ -574,9 +578,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
 
   // Fetch weather with caching, timeout + AbortController
   useEffect(() => {
-    const controller = new AbortController();
+    let controller = new AbortController();
 
-    // Load cached weather immediately
+    // Load cached weather immediately (with TTL check — max 1 hour)
     AsyncStorage.getItem(STORAGE_KEYS.cachedWeather).then(cached => {
       if (cached && mountedRef.current && !weather) {
         try {
@@ -592,14 +596,18 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     });
 
     const fetchWeather = async () => {
+      // Cancel previous in-flight request
+      controller.abort();
+      controller = new AbortController();
       try {
         const res = await fetch('https://wttr.in/?format=%t|%C', {
           signal: controller.signal,
           headers: {'User-Agent': 'InstrumentLauncher/1.0'},
         });
         const text = await res.text();
+        if (!mountedRef.current) return;
         const parts = text.split('|');
-        if (parts.length >= 2 && mountedRef.current) {
+        if (parts.length >= 2) {
           const condition = parts[1].trim().toLowerCase();
           const weatherData = {temp: parts[0].trim(), condition: parts[1].trim()};
           setWeather(weatherData);
@@ -700,11 +708,11 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   }, [navigation, musicBtnOpacity, musicBtnScale]);
 
   // Compute music apps from installed apps
-  const musicApps = installedApps.filter(app => {
+  const musicApps = useMemo(() => installedApps.filter(app => {
     const name = app.name.toLowerCase();
     const pkg = app.packageName.toLowerCase();
     return MUSIC_KEYWORDS.some(kw => name.includes(kw) || pkg.includes(kw));
-  });
+  }), [installedApps]);
 
   const toggleMusicApps = useCallback(() => {
     tick();
@@ -801,10 +809,6 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return <Text style={styles.quickAppLetter}>{name.charAt(0).toUpperCase()}</Text>;
   }, [getAppName]);
 
-  // Settings gear rotation on press
-  const settingsRotation = useRef(new Animated.Value(0)).current;
-  const settingsRotationInterp = settingsRotation.interpolate({inputRange: [0, 1], outputRange: ['0deg', '90deg']});
-
   // Quick app press feedback — clean up stale scales when quickApps change
   const quickAppScales = useRef<Record<string, Animated.Value>>({}).current;
   useEffect(() => {
@@ -819,8 +823,11 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   }, [quickAppScales]);
 
   return (
-    <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+    <SafeAreaView style={[styles.container, {backgroundColor: Colors.bg}]} {...panResponder.panHandlers}>
+      <StatusBar barStyle={isLightTheme() ? 'dark-content' : 'light-content'} backgroundColor={Colors.bg} />
+
+      {/* Animated background effect */}
+      <BackgroundEffect effect={bgEffect} active={appActive} />
 
       <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}, {translateY: swipeDragY}]}]}>
         <View style={styles.content}>
@@ -829,12 +836,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             style={styles.settingsBtn}
             activeOpacity={0.6}
             hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-            onPressIn={() => Animated.spring(settingsRotation, {toValue: 1, useNativeDriver: true, friction: 6}).start()}
-            onPressOut={() => Animated.spring(settingsRotation, {toValue: 0, useNativeDriver: true, friction: 6}).start()}
             onPress={() => { tick(); navigateTo('Settings'); }}>
-            <Animated.View style={{transform: [{rotate: settingsRotationInterp}]}}>
-              <SettingsIcon size={14} color={Colors.textMuted} />
-            </Animated.View>
+            <SettingsIcon size={14} color={Colors.textMuted} />
           </TouchableOpacity>
 
           {/* Clock — staggered fade in */}
@@ -864,6 +867,11 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
               </View>
             </Animated.View>
           )}
+
+          {/* Habit Widget — staggered */}
+          <Animated.View style={{opacity: habitAnim, transform: [{translateY: habitAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
+            <HabitWidget accentColor={accentColor} active={appActive} />
+          </Animated.View>
 
           {/* Pixel Pet — with long-press pulse indicator */}
           {petEnabled && (
@@ -1047,7 +1055,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bg,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   content: {
     flex: 1,
@@ -1056,30 +1064,30 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xxxl,
   },
   time: {
-    fontFamily: 'monospace',
-    fontSize: 42,
-    fontWeight: '200',
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 48,
+    fontWeight: '100',
     color: Colors.textPrimary,
-    letterSpacing: -2,
-    lineHeight: 48,
+    letterSpacing: -3,
+    lineHeight: 52,
   },
   cursor: {
-    fontFamily: 'monospace',
-    fontSize: 42,
-    fontWeight: '200',
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 48,
+    fontWeight: '100',
     color: Colors.textMuted,
   },
   progressWrap: {
-    height: 2,
+    height: 3,
     backgroundColor: Colors.surface2,
     marginTop: Spacing.md,
-    borderRadius: 1,
+    borderRadius: 0,
     overflow: 'hidden',
   },
   progressBar: {
-    height: 2,
+    height: 3,
     backgroundColor: Colors.textSecondary,
-    borderRadius: 1,
+    borderRadius: 0,
   },
   progressRow: {
     flexDirection: 'row',
@@ -1088,14 +1096,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   progressLabel: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 9,
     color: Colors.textMuted,
     letterSpacing: 1,
     width: 22,
   },
   progressPct: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 9,
     color: Colors.textMuted,
     letterSpacing: 0.5,
@@ -1103,25 +1111,27 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   weekProgressWrap: {
-    height: 1,
+    height: 2,
     backgroundColor: Colors.surface2,
     marginTop: 0,
-    borderRadius: 1,
+    borderRadius: 0,
     overflow: 'hidden',
   },
   weekProgressBar: {
-    height: 1,
-    borderRadius: 1,
+    height: 2,
+    borderRadius: 0,
   },
   date: {
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textSecondary,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: Spacing.sm,
   },
   weather: {
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textSecondary,
     letterSpacing: 0.5,
     marginTop: Spacing.sm,
@@ -1129,59 +1139,59 @@ const styles = StyleSheet.create({
   quoteWrap: {
     marginTop: Spacing.lg,
     paddingVertical: Spacing.md,
-    borderLeftWidth: 2,
+    borderLeftWidth: 1,
     borderLeftColor: Colors.border,
     paddingLeft: Spacing.md,
   },
   quoteText: {
-    fontSize: 13,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 12,
     color: Colors.textSecondary,
     fontStyle: 'italic',
     letterSpacing: 0.3,
+    lineHeight: 18,
   },
   quickAppsSection: {
     marginTop: Spacing.xl,
   },
   quickAppsScroll: {
-    gap: 14,
+    gap: 12,
     paddingRight: Spacing.md,
   },
   quickAppItem: {
     alignItems: 'center',
-    width: 52,
+    width: 50,
   },
   quickAppIcon: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickAppLetter: {
-    fontFamily: 'monospace',
-    fontSize: 16,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 14,
     color: Colors.textPrimary,
-    fontWeight: '500',
   },
   quickAppName: {
-    fontSize: 10,
-    color: Colors.textSecondary,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 9,
+    color: Colors.textMuted,
     marginTop: 4,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
     textAlign: 'center',
   },
-  // Headphone indicator
   headphoneIndicator: {
-    fontSize: 10,
+    fontSize: 9,
     color: Colors.textMuted,
     letterSpacing: 0.3,
   },
-  // Music mode
   musicModeWrap: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.base,
   },
   musicToggleBtn: {
     alignSelf: 'flex-start',
@@ -1189,23 +1199,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
   },
   musicToggleText: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
     color: Colors.textMuted,
     letterSpacing: 1.5,
   },
   musicAppsList: {
     marginTop: Spacing.sm,
-    gap: 2,
+    gap: 0,
   },
   musicAppItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surface2,
   },
   musicAppIcon: {
     width: 28,
@@ -1213,22 +1225,21 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.sm,
   },
   musicAppLetter: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
     color: Colors.textPrimary,
-    fontWeight: '500',
   },
   musicAppName: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 12,
     color: Colors.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     flex: 1,
   },
   settingsBtn: {
@@ -1244,10 +1255,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 56,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
     borderTopColor: Colors.border,
     backgroundColor: Colors.bg,
   },
@@ -1255,24 +1266,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 56,
+    height: 52,
   },
   termDockInner: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   termDockLabel: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 11,
     color: Colors.textSecondary,
     letterSpacing: 2,
-    fontWeight: '400',
   },
   termDockLine: {
     width: 12,
     height: 1,
-    marginTop: 5,
-    borderRadius: 1,
+    marginTop: 4,
+    borderRadius: 0,
   },
   // Rain effect
   rainContainer: {
@@ -1281,8 +1291,8 @@ const styles = StyleSheet.create({
   },
   rainDrop: {
     position: 'absolute',
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
   },
   // Pixel Pet
   petContainer: {
@@ -1290,52 +1300,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   petFace: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 16,
     letterSpacing: 1,
     lineHeight: 20,
   },
   petBody: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
     letterSpacing: 1,
     lineHeight: 14,
-    opacity: 0.6,
+    opacity: 0.5,
   },
   petHealthBar: {
     width: 60,
-    height: 2,
+    height: 3,
     backgroundColor: Colors.surface2,
     marginTop: 4,
-    borderRadius: 1,
+    borderRadius: 0,
     overflow: 'hidden',
   },
   petHealthFill: {
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 0,
   },
   petLabel: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 9,
-    color: Colors.textSecondary,
+    color: Colors.textMuted,
     marginTop: 4,
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
 
   // First-launch hints overlay
   hintsOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(10,10,10,0.96)',
+    backgroundColor: 'rgba(10,10,10,0.97)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   hintsCard: {
     width: '100%',
     paddingVertical: Spacing.xl,
   },
   hintsTitle: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Medium',
     fontSize: 14,
     color: Colors.textPrimary,
     letterSpacing: 3,
@@ -1343,7 +1353,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   hintsDivider: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
     color: Colors.textMuted,
     textAlign: 'center',
@@ -1351,22 +1361,22 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   hintsSection: {
-    fontFamily: 'monospace',
-    fontSize: 9,
-    color: Colors.textSecondary,
-    letterSpacing: 2,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 10,
+    color: Colors.textMuted,
+    letterSpacing: 2.5,
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
   hintsItem: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
+    color: Colors.textSecondary,
+    letterSpacing: 0.3,
     lineHeight: 18,
   },
   hintsDismiss: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Medium',
     fontSize: 10,
     letterSpacing: 2,
     textAlign: 'center',

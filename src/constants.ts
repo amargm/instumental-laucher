@@ -9,6 +9,8 @@ export const STORAGE_KEYS = {
   parallaxEnabled: '@settings_parallax_enabled',
   rainEnabled: '@settings_rain_enabled',
   petEnabled: '@settings_pet_enabled',
+  bgEffect: '@settings_bg_effect',
+  theme: '@settings_theme',
   petHealth: '@pet_health',
   petLastFed: '@pet_last_fed',
   hintsDismissed: '@hints_dismissed',
@@ -27,3 +29,7 @@ export const DASHBOARD_REFRESH_INTERVAL = 30000;// 30s
 export const PET_FEED_GAP = 30 * 60 * 1000;    // 30min
 export const PET_SPAM_THRESHOLD = 5 * 60 * 1000;// 5min
 export const APP_CACHE_TTL = 60000;             // 60s
+
+// Background effect types
+export type BgEffect = 'void' | 'matrix' | 'static' | 'grid';
+export const BG_EFFECTS: BgEffect[] = ['void', 'matrix', 'static', 'grid'];

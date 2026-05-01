@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Animated,
-  BackHandler,
   Keyboard,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {tick, impact, heavy} from '../native/Haptics';
+import {useTheme} from '../hooks/useTheme';
+import {useBackToHome} from '../hooks/useBackToHome';
 import {getBatteryInfo, getConnectivityInfo, isHeadphonesConnected, BatteryInfo, ConnectivityInfo} from '../native/DeviceInfo';
 import {
   executeCommand,
@@ -85,6 +86,7 @@ function useDashboard(): DashboardData {
 // ─── Main Screen ─────────────────────────────────────────
 
 const TerminalScreen: React.FC<Props> = ({navigation}) => {
+  useTheme(); // re-render on theme change
   const [input, setInput] = useState('');
   const [results, setResults] = useState<CommandResult[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -105,6 +107,14 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     // Listen for app changes
     const sub = InstalledAppsEvents.addListener('onAppsChanged', clearAppCache);
     return () => sub.remove();
+  }, []);
+
+  // Auto-focus input to pop keyboard after screen opens
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 350);
+    return () => clearTimeout(timer);
   }, []);
 
   // Cursor blink animation
@@ -129,16 +139,21 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
   }, [isTyping, dashboardOpacity]);
 
   // Live app suggestions while typing (debounced 200ms)
+  const mountedRef = useRef(true);
+  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (input.length >= 2 && isTyping) {
       const q = input.trim();
       // Don't suggest for known commands
-      const knownCommands = ['bat', 'battery', 'weather', 'time', 'date', 'calc', 'note', 'quote', 'net', 'wifi', 'help', 'clear', 'cls', 'settings', 'bt', 'bluetooth', 'dnd', 'display', 'gps', 'location'];
+      const knownCommands = ['bat', 'battery', 'weather', 'time', 'date', 'calc', 'note', 'quote', 'net', 'wifi', 'help', 'clear', 'cls', 'settings', 'bt', 'bluetooth', 'dnd', 'display', 'gps', 'location', 'bg', 'background', 'theme', 'habit', 'habits'];
       const firstWord = q.split(/\s+/)[0].toLowerCase();
       if (!knownCommands.includes(firstWord) && !/^[=]/.test(firstWord)) {
         searchTimer.current = setTimeout(() => {
-          searchApps(q).then(setSuggestions);
+          searchApps(q).then(results => {
+            if (mountedRef.current) setSuggestions(results);
+          });
         }, 200);
       } else {
         setSuggestions([]);
@@ -149,21 +164,20 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [input, isTyping]);
 
-  // Back button handling
-  useEffect(() => {
-    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (isTyping) {
-        Keyboard.dismiss();
-        setIsTyping(false);
-        setInput('');
-        setSuggestions([]);
-        return true;
-      }
-      navigation.goBack();
-      return true;
-    });
-    return () => handler.remove();
-  }, [isTyping, navigation]);
+  // Centralized back handling — dismiss keyboard first, or go Home
+  const isTypingRef = useRef(false);
+  isTypingRef.current = isTyping;
+  const handleBack = useCallback(() => {
+    if (isTypingRef.current) {
+      Keyboard.dismiss();
+      setIsTyping(false);
+      setInput('');
+      setSuggestions([]);
+      return true; // handled
+    }
+    return false;
+  }, []);
+  useBackToHome(navigation, handleBack);
 
   // Dismiss keyboard when navigating away from this screen
   useEffect(() => {
@@ -212,7 +226,9 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
 
     // If it was a launch, go back to home
     if (result.type === 'launch') {
-      setTimeout(() => navigation.goBack(), 200);
+      setTimeout(() => {
+        try { navigation.navigate('Home'); } catch (e) {}
+      }, 200);
     }
   }, [input, navigation]);
 
@@ -221,7 +237,9 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     launchApp(app.packageName).catch(() => {});
     setInput('');
     setSuggestions([]);
-    setTimeout(() => navigation.goBack(), 200);
+    setTimeout(() => {
+      try { navigation.navigate('Home'); } catch (e) {}
+    }, 200);
   }, [navigation]);
 
   const handleFocus = useCallback(() => {
@@ -230,7 +248,9 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
 
   const handleClose = useCallback(() => {
     tick();
-    navigation.goBack();
+    try {
+      navigation.navigate('Home');
+    } catch (e) {}
   }, [navigation]);
 
   // Tap result to re-run command
@@ -421,43 +441,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surface2,
   },
   headerTitle: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: Colors.textSecondary,
+    fontFamily: 'JetBrainsMono-Medium',
+    fontSize: 14,
+    color: Colors.textPrimary,
     letterSpacing: 3,
   },
   closeWrap: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    borderRadius: 0,
   },
   closeText: {
-    fontFamily: 'monospace',
-    fontSize: 11,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 10,
     color: Colors.textMuted,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   body: {
     flex: 1,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   // Input
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: Spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   prompt: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 18,
     color: Colors.accent,
     marginRight: Spacing.sm,
@@ -465,18 +487,18 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontFamily: 'monospace',
-    fontSize: 18,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 16,
     color: Colors.textPrimary,
     padding: 0,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   cursorHint: {
-    fontFamily: 'monospace',
-    fontSize: 18,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 16,
     color: Colors.accent,
     position: 'absolute',
-    left: Spacing.sm + 14, // after prompt
+    left: Spacing.sm + 14,
   },
   // Suggestions
   suggestionsWrap: {
@@ -486,18 +508,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surface2,
   },
   suggestionArrow: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.accent,
     marginRight: Spacing.sm,
   },
   suggestionName: {
-    fontFamily: 'monospace',
-    fontSize: 14,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 13,
     color: Colors.textPrimary,
+    letterSpacing: 0.3,
   },
   // Dashboard
   dashboard: {
@@ -507,14 +532,14 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   dashLabel: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 10,
     color: Colors.textMuted,
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     marginBottom: Spacing.xs,
   },
   dashLine: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 13,
     color: Colors.textSecondary,
     lineHeight: 22,
@@ -524,34 +549,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingVertical: 5,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surface2,
   },
   historyLeft: {
     flex: 1,
     marginRight: Spacing.md,
   },
   historyInput: {
-    fontFamily: 'monospace',
-    fontSize: 13,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 12,
     color: Colors.textSecondary,
+    letterSpacing: 0.3,
   },
   historyOutput: {
-    fontFamily: 'monospace',
-    fontSize: 11,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 10,
     color: Colors.textMuted,
-    marginTop: 1,
+    marginTop: 2,
   },
   historyTime: {
-    fontFamily: 'monospace',
-    fontSize: 11,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 9,
     color: Colors.textMuted,
+    letterSpacing: 0.5,
   },
   // Hints
   hintLine: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textMuted,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   hintCmd: {
     color: Colors.textSecondary,
@@ -559,13 +588,12 @@ const styles = StyleSheet.create({
   // Loading
   loadingWrap: {
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 0,
   },
   loadingText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textMuted,
-    fontStyle: 'italic',
   },
   // Results
   resultsWrap: {
@@ -574,20 +602,22 @@ const styles = StyleSheet.create({
   resultBlock: {
     marginBottom: Spacing.md,
     paddingBottom: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surface2,
   },
   resultInput: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 11,
     color: Colors.textMuted,
+    letterSpacing: 0.5,
     marginBottom: 4,
   },
   resultOutput: {
-    fontFamily: 'monospace',
+    fontFamily: 'JetBrainsMono-Regular',
     fontSize: 13,
     color: Colors.textPrimary,
     lineHeight: 20,
+    letterSpacing: 0.3,
   },
   resultError: {
     color: Colors.danger,
@@ -596,10 +626,11 @@ const styles = StyleSheet.create({
     color: Colors.success,
   },
   resultSecondary: {
-    fontFamily: 'monospace',
-    fontSize: 11,
+    fontFamily: 'JetBrainsMono-Regular',
+    fontSize: 10,
     color: Colors.textMuted,
     marginTop: 2,
+    letterSpacing: 0.3,
   },
 });
 

@@ -26,18 +26,22 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Synchronous log first — guaranteed visibility
+    console.error('[ErrorBoundary]', error.message, info.componentStack?.slice(0, 200));
+    // Best-effort async storage (fire and forget)
     const entry = {
       message: error.message,
       stack: error.stack?.slice(0, 500),
       componentStack: info.componentStack?.slice(0, 300),
       timestamp: new Date().toISOString(),
     };
-    AsyncStorage.getItem(CRASH_LOG_KEY).then(existing => {
-      const logs = existing ? JSON.parse(existing) : [];
-      logs.unshift(entry);
-      // Keep last 10 crashes
-      AsyncStorage.setItem(CRASH_LOG_KEY, JSON.stringify(logs.slice(0, 10))).catch(() => {});
-    }).catch(() => {});
+    try {
+      AsyncStorage.getItem(CRASH_LOG_KEY).then(existing => {
+        const logs = existing ? JSON.parse(existing) : [];
+        logs.unshift(entry);
+        AsyncStorage.setItem(CRASH_LOG_KEY, JSON.stringify(logs.slice(0, 10))).catch(() => {});
+      }).catch(() => {});
+    } catch (_) {}
   }
 
   handleReset = () => {

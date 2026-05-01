@@ -33,6 +33,8 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
     }
 
     private fun registerPackageReceiver() {
+        // Prevent double registration
+        if (packageReceiver != null) return
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -110,8 +112,11 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
             val stream = ByteArrayOutputStream()
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 70, stream)
             val base64Icon = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+            if (bitmap != scaledBitmap) bitmap.recycle()
             scaledBitmap.recycle()
             promise.resolve(base64Icon)
+        } catch (e: PackageManager.NameNotFoundException) {
+            promise.resolve("")
         } catch (e: Exception) {
             promise.resolve("")
         }
