@@ -26,6 +26,9 @@ const STORAGE_KEYS = {
   quickApps: '@settings_quick_apps',
   dockApps: '@settings_dock_apps',
   accentColor: '@settings_accent_color',
+  glitchEnabled: '@settings_glitch_enabled',
+  parallaxEnabled: '@settings_parallax_enabled',
+  asciiClockEnabled: '@settings_ascii_clock_enabled',
 };
 
 const ACCENT_COLORS = [
@@ -40,6 +43,9 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [quickApps, setQuickApps] = useState<string[]>([]);
   const [dockApps, setDockApps] = useState<string[]>([]);
   const [accentColor, setAccentColor] = useState('#FFFFFF');
+  const [glitchEnabled, setGlitchEnabled] = useState(true);
+  const [parallaxEnabled, setParallaxEnabled] = useState(true);
+  const [asciiClockEnabled, setAsciiClockEnabled] = useState(false);
   const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
   const [notifAccess, setNotifAccess] = useState(false);
   const [showAppPicker, setShowAppPicker] = useState(false);
@@ -62,6 +68,12 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         if (dock) setDockApps(JSON.parse(dock));
         const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
+        const glitch = await AsyncStorage.getItem(STORAGE_KEYS.glitchEnabled);
+        if (glitch !== null) setGlitchEnabled(glitch === 'true');
+        const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
+        if (parallax !== null) setParallaxEnabled(parallax === 'true');
+        const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
+        if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
       } catch (e) {}
     };
     loadSettings();
@@ -148,6 +160,21 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const selectAccent = (color: string) => {
     setAccentColor(color);
     safeSave(STORAGE_KEYS.accentColor, color);
+  };
+
+  const toggleGlitch = (value: boolean) => {
+    setGlitchEnabled(value);
+    safeSave(STORAGE_KEYS.glitchEnabled, String(value));
+  };
+
+  const toggleParallax = (value: boolean) => {
+    setParallaxEnabled(value);
+    safeSave(STORAGE_KEYS.parallaxEnabled, String(value));
+  };
+
+  const toggleAsciiClock = (value: boolean) => {
+    setAsciiClockEnabled(value);
+    safeSave(STORAGE_KEYS.asciiClockEnabled, String(value));
   };
 
   if (showAppPicker) {
@@ -372,6 +399,57 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             onValueChange={toggleGestures}
             trackColor={{false: Colors.surface2, true: Colors.accent}}
             thumbColor={gesturesEnabled ? Colors.bg : Colors.textMuted}
+          />
+        </View>
+
+        {/* Aesthetics */}
+        <Text style={styles.groupLabel}>AESTHETICS</Text>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>▓</Text>
+            <View>
+              <Text style={styles.settingName}>Glitch Text</Text>
+              <Text style={styles.settingDesc}>Subtle character swap on clock</Text>
+            </View>
+          </View>
+          <Switch
+            value={glitchEnabled}
+            onValueChange={toggleGlitch}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={glitchEnabled ? Colors.bg : Colors.textMuted}
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>◇</Text>
+            <View>
+              <Text style={styles.settingName}>Parallax Clock</Text>
+              <Text style={styles.settingDesc}>Gyroscope tilt effect on time</Text>
+            </View>
+          </View>
+          <Switch
+            value={parallaxEnabled}
+            onValueChange={toggleParallax}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={parallaxEnabled ? Colors.bg : Colors.textMuted}
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>█</Text>
+            <View>
+              <Text style={styles.settingName}>ASCII Clock</Text>
+              <Text style={styles.settingDesc}>Render time in block letters</Text>
+            </View>
+          </View>
+          <Switch
+            value={asciiClockEnabled}
+            onValueChange={toggleAsciiClock}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={asciiClockEnabled ? Colors.bg : Colors.textMuted}
           />
         </View>
 

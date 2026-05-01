@@ -68,7 +68,7 @@ const App = () => {
             <Stack.Screen
               name="AppDrawer"
               component={AppDrawerWithBoundary}
-              options={{animation: 'fade', animationDuration: 120}}
+              options={{animation: 'slide_from_bottom', animationDuration: 100}}
             />
             <Stack.Screen
               name="Settings"

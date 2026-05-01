@@ -32,6 +32,9 @@ const STORAGE_KEYS = {
   quickApps: '@settings_quick_apps',
   dockApps: '@settings_dock_apps',
   accentColor: '@settings_accent_color',
+  glitchEnabled: '@settings_glitch_enabled',
+  parallaxEnabled: '@settings_parallax_enabled',
+  asciiClockEnabled: '@settings_ascii_clock_enabled',
 };
 
 const DEFAULT_DOCK: {pkg: string; label: string}[] = [
@@ -46,16 +49,45 @@ const DEFAULT_ACCENT = '#FFFFFF';
 // ─── Glitch characters for the glitch text effect ───
 const GLITCH_CHARS = '!@#$%&*░▒▓█▀▄';
 
+// ─── ASCII art digits (5 lines high, 4 chars wide) ───
+const ASCII_DIGITS: Record<string, string[]> = {
+  '0': ['┌──┐', '│  │', '│  │', '│  │', '└──┘'],
+  '1': ['   ┐', '   │', '   │', '   │', '   ┘'],
+  '2': ['┌──┐', '   │', '┌──┘', '│   ', '└──┘'],
+  '3': ['┌──┐', '   │', ' ──┤', '   │', '└──┘'],
+  '4': ['┐  ┐', '│  │', '└──┤', '   │', '   ┘'],
+  '5': ['┌──┐', '│   ', '└──┐', '   │', '└──┘'],
+  '6': ['┌──┐', '│   ', '├──┐', '│  │', '└──┘'],
+  '7': ['┌──┐', '   │', '   │', '   │', '   ┘'],
+  '8': ['┌──┐', '│  │', '├──┤', '│  │', '└──┘'],
+  '9': ['┌──┐', '│  │', '└──┤', '   │', '└──┘'],
+  ':': ['    ', ' ·  ', '    ', ' ·  ', '    '],
+  ' ': ['    ', '    ', '    ', '    ', '    '],
+};
+
+const renderAsciiTime = (timeStr: string): string => {
+  const chars = timeStr.replace(/[APM]/g, '').trim().split('');
+  const lines: string[] = ['', '', '', '', ''];
+  for (const ch of chars) {
+    const digit = ASCII_DIGITS[ch] || ASCII_DIGITS[' '];
+    for (let i = 0; i < 5; i++) {
+      lines[i] += digit[i] + ' ';
+    }
+  }
+  return lines.join('\n');
+};
+
 // ─── Memoized Clock Component with parallax + glitch ───
-const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24'; accentColor: string}) => {
+const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnabled, asciiEnabled}: {clockFormat: '12' | '24'; accentColor: string; glitchEnabled: boolean; parallaxEnabled: boolean; asciiEnabled: boolean}) => {
   const [time, setTime] = useState('');
   const [displayTime, setDisplayTime] = useState('');
   const [date, setDate] = useState('');
   const [dayProgress, setDayProgress] = useState(0);
 
-  // Parallax via gyroscope
+  // Parallax via gyroscope (only initialize sensor if enabled)
   const sensor = useAnimatedSensor(SensorType.ROTATION, {interval: 60});
   const parallaxStyle = useAnimatedStyle(() => {
+    if (!parallaxEnabled) return {};
     const {pitch, roll} = sensor.sensor.value;
     return {
       transform: [
@@ -97,6 +129,7 @@ const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24';
 
   // Glitch text effect — occasional subtle character swap
   useEffect(() => {
+    if (!glitchEnabled || asciiEnabled) return;
     const scheduleGlitch = () => {
       const delay = 3000 + Math.random() * 7000; // 3-10 seconds
       return setTimeout(() => {
@@ -124,12 +157,16 @@ const ClockWidget = memo(({clockFormat, accentColor}: {clockFormat: '12' | '24';
       clearTimeout(timeoutId);
       clearInterval(intervalId);
     };
-  }, [time]);
+  }, [time, glitchEnabled, asciiEnabled]);
 
   return (
     <View style={styles.widget}>
-      <ReanimatedAnimated.View style={parallaxStyle}>
-        <Text style={styles.time}>{displayTime}</Text>
+      <ReanimatedAnimated.View style={parallaxEnabled ? parallaxStyle : undefined}>
+        {asciiEnabled ? (
+          <Text style={styles.asciiTime}>{renderAsciiTime(time)}</Text>
+        ) : (
+          <Text style={styles.time}>{displayTime}</Text>
+        )}
       </ReanimatedAnimated.View>
       <View style={styles.progressWrap}>
         <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
@@ -149,6 +186,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [quickApps, setQuickApps] = useState<string[]>([]);
   const [dockApps, setDockApps] = useState<string[]>(DEFAULT_DOCK.map(d => d.pkg));
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT);
+  const [glitchEnabled, setGlitchEnabled] = useState(true);
+  const [parallaxEnabled, setParallaxEnabled] = useState(true);
+  const [asciiClockEnabled, setAsciiClockEnabled] = useState(false);
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [weather, setWeather] = useState<{temp: string; condition: string} | null>(null);
   const mountedRef = useRef(true);
@@ -207,6 +247,12 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (dock) setDockApps(JSON.parse(dock));
         const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
+        const glitch = await AsyncStorage.getItem(STORAGE_KEYS.glitchEnabled);
+        if (glitch !== null) setGlitchEnabled(glitch === 'true');
+        const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
+        if (parallax !== null) setParallaxEnabled(parallax === 'true');
+        const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
+        if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
       } catch (e) {}
     };
     loadSettings();
@@ -230,6 +276,12 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (dock) setDockApps(JSON.parse(dock));
         const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
+        const glitch = await AsyncStorage.getItem(STORAGE_KEYS.glitchEnabled);
+        if (glitch !== null) setGlitchEnabled(glitch === 'true');
+        const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
+        if (parallax !== null) setParallaxEnabled(parallax === 'true');
+        const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
+        if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
       } catch (e) {}
     });
     return unsubscribe;
@@ -320,7 +372,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           </TouchableOpacity>
 
           {/* Clock — isolated memo component */}
-          <ClockWidget clockFormat={clockFormat} accentColor={accentColor} />
+          <ClockWidget clockFormat={clockFormat} accentColor={accentColor} glitchEnabled={glitchEnabled} parallaxEnabled={parallaxEnabled} asciiEnabled={asciiClockEnabled} />
 
           {/* Weather */}
           {weather && (
@@ -424,6 +476,13 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: -2,
     lineHeight: 48,
+  },
+  asciiTime: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: Colors.textPrimary,
+    lineHeight: 13,
+    letterSpacing: 1,
   },
   progressWrap: {
     height: 2,
