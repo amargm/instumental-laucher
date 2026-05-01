@@ -1,0 +1,15 @@
+export const STORAGE_KEYS = {
+  gesturesEnabled: '@settings_gestures',
+  clockFormat: '@settings_clock_format',
+  quote: '@settings_quote',
+  quickApps: '@settings_quick_apps',
+  dockApps: '@settings_dock_apps',
+  accentColor: '@settings_accent_color',
+  glitchEnabled: '@settings_glitch_enabled',
+  parallaxEnabled: '@settings_parallax_enabled',
+  rainEnabled: '@settings_rain_enabled',
+  petEnabled: '@settings_pet_enabled',
+  petHealth: '@pet_health',
+  petLastFed: '@pet_last_fed',
+  hintsDismissed: '@hints_dismissed',
+};

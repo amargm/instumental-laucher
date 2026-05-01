@@ -19,20 +19,8 @@ interface Props {
   navigation: any;
 }
 
-const STORAGE_KEYS = {
-  gesturesEnabled: '@settings_gestures',
-  clockFormat: '@settings_clock_format',
-  quote: '@settings_quote',
-  quickApps: '@settings_quick_apps',
-  dockApps: '@settings_dock_apps',
-  accentColor: '@settings_accent_color',
-  glitchEnabled: '@settings_glitch_enabled',
-  parallaxEnabled: '@settings_parallax_enabled',
-  asciiClockEnabled: '@settings_ascii_clock_enabled',
-  rainEnabled: '@settings_rain_enabled',
-  petEnabled: '@settings_pet_enabled',
-  dockStyle: '@settings_dock_style',
-};
+import {STORAGE_KEYS} from '../constants';
+import {tick, impact} from '../native/Haptics';
 
 const ACCENT_COLORS = [
   '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96E6A1',
@@ -48,10 +36,8 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [accentColor, setAccentColor] = useState('#FFFFFF');
   const [glitchEnabled, setGlitchEnabled] = useState(true);
   const [parallaxEnabled, setParallaxEnabled] = useState(true);
-  const [asciiClockEnabled, setAsciiClockEnabled] = useState(false);
   const [rainEnabled, setRainEnabled] = useState(true);
   const [petEnabled, setPetEnabled] = useState(true);
-  const [dockStyle, setDockStyle] = useState<'terminal' | 'piano'>('terminal');
   const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
   const [notifAccess, setNotifAccess] = useState(false);
   const [showAppPicker, setShowAppPicker] = useState(false);
@@ -78,14 +64,10 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         if (glitch !== null) setGlitchEnabled(glitch === 'true');
         const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
         if (parallax !== null) setParallaxEnabled(parallax === 'true');
-        const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
-        if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
         const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
         if (rain !== null) setRainEnabled(rain === 'true');
         const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
         if (pet !== null) setPetEnabled(pet === 'true');
-        const ds = await AsyncStorage.getItem(STORAGE_KEYS.dockStyle);
-        if (ds === 'terminal' || ds === 'piano') setDockStyle(ds);
       } catch (e) {}
     };
     loadSettings();
@@ -134,6 +116,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   };
 
   const toggleClockFormat = async () => {
+    tick();
     const newFmt = clockFormat === '24' ? '12' : '24';
     setClockFormat(newFmt);
     safeSave(STORAGE_KEYS.clockFormat, newFmt);
@@ -150,7 +133,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
     if (quickApps.includes(packageName)) {
       updated = quickApps.filter(p => p !== packageName);
     } else {
-      if (quickApps.length >= 10) return; // max 10
+      if (quickApps.length >= 5) return; // max 5
       updated = [...quickApps, packageName];
     }
     setQuickApps(updated);
@@ -170,46 +153,40 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   };
 
   const selectAccent = (color: string) => {
+    tick();
     setAccentColor(color);
     safeSave(STORAGE_KEYS.accentColor, color);
   };
 
   const toggleGlitch = (value: boolean) => {
+    tick();
     setGlitchEnabled(value);
     safeSave(STORAGE_KEYS.glitchEnabled, String(value));
   };
 
   const toggleParallax = (value: boolean) => {
+    tick();
     setParallaxEnabled(value);
     safeSave(STORAGE_KEYS.parallaxEnabled, String(value));
   };
 
-  const toggleAsciiClock = (value: boolean) => {
-    setAsciiClockEnabled(value);
-    safeSave(STORAGE_KEYS.asciiClockEnabled, String(value));
-  };
-
   const toggleRain = (value: boolean) => {
+    tick();
     setRainEnabled(value);
     safeSave(STORAGE_KEYS.rainEnabled, String(value));
   };
 
   const togglePet = (value: boolean) => {
+    tick();
     setPetEnabled(value);
     safeSave(STORAGE_KEYS.petEnabled, String(value));
-  };
-
-  const cycleDockStyle = () => {
-    const next = dockStyle === 'terminal' ? 'piano' : 'terminal';
-    setDockStyle(next);
-    safeSave(STORAGE_KEYS.dockStyle, next);
   };
 
   if (showAppPicker) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>SELECT APPS ({quickApps.length}/10)</Text>
+          <Text style={styles.title}>SELECT APPS ({quickApps.length}/5)</Text>
           <TouchableOpacity onPress={() => setShowAppPicker(false)}>
             <Text style={styles.closeBtn}>DONE</Text>
           </TouchableOpacity>
@@ -366,7 +343,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <View>
               <Text style={styles.settingName}>Quick Access Apps</Text>
               <Text style={styles.settingDesc}>
-                {quickApps.length} of 10 selected · tap to edit
+                {quickApps.length} of 5 selected · tap to edit
               </Text>
             </View>
           </View>
@@ -467,22 +444,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>█</Text>
-            <View>
-              <Text style={styles.settingName}>ASCII Clock</Text>
-              <Text style={styles.settingDesc}>Render time in block letters</Text>
-            </View>
-          </View>
-          <Switch
-            value={asciiClockEnabled}
-            onValueChange={toggleAsciiClock}
-            trackColor={{false: Colors.surface2, true: Colors.accent}}
-            thumbColor={asciiClockEnabled ? Colors.bg : Colors.textMuted}
-          />
-        </View>
-
-        <View style={styles.settingItem}>
-          <View style={styles.settingLeft}>
             <Text style={styles.settingIcon}>☔</Text>
             <View>
               <Text style={styles.settingName}>Rain Effect</Text>
@@ -512,20 +473,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             thumbColor={petEnabled ? Colors.bg : Colors.textMuted}
           />
         </View>
-
-        <TouchableOpacity
-          style={styles.settingItem}
-          activeOpacity={0.7}
-          onPress={cycleDockStyle}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>▪</Text>
-            <View>
-              <Text style={styles.settingName}>Dock Style</Text>
-              <Text style={styles.settingDesc}>Tap to switch · {dockStyle === 'terminal' ? 'terminal labels' : 'piano keys'}</Text>
-            </View>
-          </View>
-          <Text style={styles.settingValue}>{dockStyle.toUpperCase()}</Text>
-        </TouchableOpacity>
 
         {/* Permissions */}
         <Text style={styles.groupLabel}>PERMISSIONS</Text>

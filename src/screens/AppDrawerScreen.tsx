@@ -11,6 +11,7 @@ import {
   Image,
   Animated,
   AppState,
+  Modal,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -18,11 +19,14 @@ import {
   getInstalledApps,
   getAppIcon,
   launchApp,
+  openAppSettings,
+  uninstallApp,
   AppInfo,
   InstalledAppsEvents,
 } from '../native/InstalledApps';
 import {isHeadphonesConnected} from '../native/DeviceInfo';
 import {APP_ICON_MAP} from '../components/AppIcons';
+import {impact, heavy} from '../native/Haptics';
 
 // Module-level cache so apps persist between navigations
 let cachedApps: AppInfo[] = [];
@@ -97,6 +101,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   const [apps, setApps] = useState<AppInfo[]>(cachedApps);
   const [loading, setLoading] = useState(cachedApps.length === 0);
   const [headphonesConnected, setHeadphonesConnected] = useState(false);
+  const [contextApp, setContextApp] = useState<AppInfo | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   // Launch animation
   const launchScale = useRef(new Animated.Value(1)).current;
@@ -219,6 +224,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   })();
 
   const handleLaunch = useCallback(async (packageName: string) => {
+    impact();
     Animated.parallel([
       Animated.timing(launchScale, {toValue: 1.04, duration: 150, useNativeDriver: true}),
       Animated.timing(launchOpacity, {toValue: 0, duration: 150, useNativeDriver: true}),
@@ -226,6 +232,12 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       launchApp(packageName).catch(e => console.warn('Failed to launch:', packageName, e));
     });
   }, [launchScale, launchOpacity]);
+
+  const handleLongPress = useCallback((pkg: string) => {
+    heavy();
+    const app = apps.find(a => a.packageName === pkg);
+    if (app) setContextApp(app);
+  }, [apps]);
 
   // Reset launch animation on focus return
   useEffect(() => {
@@ -248,8 +260,8 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   }, [launchScale, launchOpacity]);
 
   const renderApp = useCallback(({item, index}: {item: AppInfo; index: number}) => (
-    <AppItem item={item} onPress={handleLaunch} index={index} staggerAnim={index < 8 ? itemAnims[index] : undefined} />
-  ), [handleLaunch, itemAnims]);
+    <AppItem item={item} onPress={handleLaunch} onLongPress={handleLongPress} index={index} staggerAnim={index < 8 ? itemAnims[index] : undefined} />
+  ), [handleLaunch, handleLongPress, itemAnims]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -343,6 +355,34 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
         <NavItem label="CONFIG" active={false} onPress={() => navigation.navigate('Settings')} />
       </View>
       </Animated.View>
+
+      {/* Long-press context menu */}
+      {contextApp && (
+        <Modal transparent animationType="fade" onRequestClose={() => setContextApp(null)}>
+          <TouchableOpacity style={styles.contextOverlay} activeOpacity={1} onPress={() => setContextApp(null)}>
+            <View style={styles.contextMenu}>
+              <Text style={styles.contextTitle}>{contextApp.name}</Text>
+              <TouchableOpacity style={styles.contextItem} onPress={() => {
+                impact();
+                openAppSettings(contextApp.packageName);
+                setContextApp(null);
+              }}>
+                <Text style={styles.contextLabel}>APP INFO</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.contextItem} onPress={() => {
+                heavy();
+                uninstallApp(contextApp.packageName);
+                setContextApp(null);
+              }}>
+                <Text style={[styles.contextLabel, {color: '#FF6B6B'}]}>UNINSTALL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.contextItem} onPress={() => setContextApp(null)}>
+                <Text style={[styles.contextLabel, {color: Colors.textMuted}]}>CANCEL</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 };
@@ -350,7 +390,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 // Icon cache to avoid re-fetching
 const iconCache: Record<string, string> = {};
 
-const AppItem = memo(({item, onPress, index, staggerAnim}: {item: AppInfo; onPress: (pkg: string) => void; index?: number; staggerAnim?: Animated.Value}) => {
+const AppItem = memo(({item, onPress, onLongPress, index, staggerAnim}: {item: AppInfo; onPress: (pkg: string) => void; onLongPress?: (pkg: string) => void; index?: number; staggerAnim?: Animated.Value}) => {
   const [icon, setIcon] = useState<string>(iconCache[item.packageName] || '');
   const CustomIcon = APP_ICON_MAP[item.packageName];
 
@@ -369,7 +409,9 @@ const AppItem = memo(({item, onPress, index, staggerAnim}: {item: AppInfo; onPre
     <TouchableOpacity
       style={styles.appItem}
       activeOpacity={0.7}
-      onPress={() => onPress(item.packageName)}>
+      onPress={() => onPress(item.packageName)}
+      onLongPress={() => onLongPress?.(item.packageName)}
+      delayLongPress={500}>
       <View style={styles.appIcon}>
         {CustomIcon ? (
           <CustomIcon size={18} />
@@ -572,6 +614,40 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 12,
     color: Colors.textMuted,
+  },
+  contextOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10,10,10,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contextMenu: {
+    width: 200,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sm,
+    padding: Spacing.md,
+  },
+  contextTitle: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  contextItem: {
+    paddingVertical: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    alignItems: 'center',
+  },
+  contextLabel: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: Colors.textPrimary,
+    letterSpacing: 1.5,
   },
 });
 

@@ -19,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               add(InstalledAppsPackage())
               add(DeviceInfoPackage())
+              add(HapticsPackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

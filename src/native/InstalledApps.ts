@@ -55,11 +55,3 @@ export async function openSystemSettings(): Promise<boolean> {
  * Event emitter for app install/uninstall/update events.
  */
 export const InstalledAppsEvents = new NativeEventEmitter(InstalledApps);
-
-/**
- * @deprecated Use DeviceInfo module — openNotificationListenerSettings() instead.
- * Redirects to openSystemSettings as the native method was removed.
- */
-export async function expandNotificationPanel(): Promise<boolean> {
-  return openSystemSettings();
-}

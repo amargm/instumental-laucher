@@ -25,6 +25,7 @@ import {
   DeviceInfoEvents,
   NotificationItem,
 } from '../native/DeviceInfo';
+import {impact, heavy} from '../native/Haptics';
 
 interface QuickAction {
   id: string;
@@ -68,11 +69,13 @@ const NotificationScreen: React.FC<Props> = ({navigation}) => {
   }, [loadNotifications]);
 
   const handleDismiss = async (key: string) => {
+    heavy();
     await dismissNotification(key);
     setNotifications(prev => prev.filter(n => n.key !== key));
   };
 
   const handleDismissAll = async () => {
+    heavy();
     await dismissAllNotifications();
     setNotifications([]);
   };
