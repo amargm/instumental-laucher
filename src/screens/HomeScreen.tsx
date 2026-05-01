@@ -43,6 +43,7 @@ const STORAGE_KEYS = {
   reactionBest: '@reaction_best_time',
   rainEnabled: '@settings_rain_enabled',
   petEnabled: '@settings_pet_enabled',
+  hintsDismissed: '@hints_dismissed',
 };
 
 const DEFAULT_DOCK: {pkg: string; label: string}[] = [
@@ -189,6 +190,7 @@ const PixelPet = memo(({health, accentColor}: {health: number; accentColor: stri
         <View style={[styles.petHealthFill, {width: `${health}%`, backgroundColor: accentColor}]} />
       </View>
       <Text style={styles.petLabel}>PET · {health}%</Text>
+      <Text style={styles.petHint}>hold to play · health ↑ less screen time</Text>
     </View>
   );
 });
@@ -377,11 +379,18 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
           <Text style={styles.time}>{displayTime}</Text>
         )}
       </ReanimatedAnimated.View>
-      <View style={styles.progressWrap}>
-        <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
+      <View style={styles.progressRow}>
+        <Text style={styles.progressLabel}>DAY</Text>
+        <View style={[styles.progressWrap, {flex: 1}]}>
+          <View style={[styles.progressBar, {width: `${dayProgress * 100}%`, backgroundColor: accentColor}]} />
+        </View>
+        <Text style={styles.progressPct}>{Math.round(dayProgress * 100)}%</Text>
       </View>
-      <View style={styles.weekProgressWrap}>
-        <View style={[styles.weekProgressBar, {width: `${weekProgress * 100}%`, backgroundColor: accentColor, opacity: 0.4}]} />
+      <View style={[styles.progressRow, {marginTop: 3}]}>
+        <Text style={styles.progressLabel}>WK</Text>
+        <View style={[styles.weekProgressWrap, {flex: 1}]}>
+          <View style={[styles.weekProgressBar, {width: `${weekProgress * 100}%`, backgroundColor: accentColor, opacity: 0.4}]} />
+        </View>
       </View>
       <Text style={styles.date}>{date}</Text>
     </View>
@@ -408,6 +417,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [petEnabled, setPetEnabled] = useState(true);
   const [petHealth, setPetHealth] = useState(50);
   const [showReactionGame, setShowReactionGame] = useState(false);
+  const [showHints, setShowHints] = useState(false);
   const mountedRef = useRef(true);
 
   // Staggered mount animations — each element cascades in
@@ -495,6 +505,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (rain !== null) setRainEnabled(rain === 'true');
         const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
         if (pet !== null) setPetEnabled(pet === 'true');
+        // Show hints on first launch
+        const hintsDismissed = await AsyncStorage.getItem(STORAGE_KEYS.hintsDismissed);
+        if (!hintsDismissed) setShowHints(true);
       } catch (e) {}
     };
     loadSettings();
@@ -799,6 +812,50 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       {showReactionGame && (
         <ReactionTimeGame accentColor={accentColor} onClose={() => setShowReactionGame(false)} />
       )}
+
+      {/* First-launch hints overlay */}
+      {showHints && (
+        <Modal transparent animationType="fade" onRequestClose={() => {
+          setShowHints(false);
+          AsyncStorage.setItem(STORAGE_KEYS.hintsDismissed, 'true').catch(() => {});
+        }}>
+          <TouchableOpacity
+            style={styles.hintsOverlay}
+            activeOpacity={1}
+            onPress={() => {
+              setShowHints(false);
+              AsyncStorage.setItem(STORAGE_KEYS.hintsDismissed, 'true').catch(() => {});
+            }}>
+            <View style={styles.hintsCard}>
+              <Text style={styles.hintsTitle}>INSTRUMENT LAUNCHER</Text>
+              <Text style={styles.hintsDivider}>────────────────────</Text>
+
+              <Text style={styles.hintsSection}>GESTURES</Text>
+              <Text style={styles.hintsItem}>↓  swipe down → notifications</Text>
+              <Text style={styles.hintsItem}>↑  swipe up   → app drawer</Text>
+
+              <Text style={styles.hintsSection}>HOME SCREEN</Text>
+              <Text style={styles.hintsItem}>▬  top bar    → day progress (0-100%)</Text>
+              <Text style={styles.hintsItem}>▬  thin bar   → week progress (Mon→Sun)</Text>
+              <Text style={styles.hintsItem}>◉  pixel pet  → hold 0.6s to play game</Text>
+              <Text style={styles.hintsItem}>   pet health → ↑ less pickups  ↓ frequent</Text>
+
+              <Text style={styles.hintsSection}>PIANO DOCK</Text>
+              <Text style={styles.hintsItem}>▮  press key  → reveals app name</Text>
+              <Text style={styles.hintsItem}>▮  last key   → opens app drawer</Text>
+
+              <Text style={styles.hintsSection}>EFFECTS (toggle in ⚙ settings)</Text>
+              <Text style={styles.hintsItem}>▓  glitch     → random char flicker on clock</Text>
+              <Text style={styles.hintsItem}>◇  parallax   → tilt phone to shift clock</Text>
+              <Text style={styles.hintsItem}>█  ASCII      → block-letter clock mode</Text>
+              <Text style={styles.hintsItem}>☔ rain        → particles when weather is rain</Text>
+
+              <Text style={styles.hintsDivider}>────────────────────</Text>
+              <Text style={[styles.hintsDismiss, {color: accentColor}]}>TAP ANYWHERE TO DISMISS</Text>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 };
@@ -883,10 +940,31 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.textSecondary,
     borderRadius: 1,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    gap: 6,
+  },
+  progressLabel: {
+    fontFamily: 'monospace',
+    fontSize: 7,
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    width: 18,
+  },
+  progressPct: {
+    fontFamily: 'monospace',
+    fontSize: 7,
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+    width: 24,
+    textAlign: 'right',
+  },
   weekProgressWrap: {
     height: 1,
     backgroundColor: Colors.surface2,
-    marginTop: 3,
+    marginTop: 0,
     borderRadius: 1,
     overflow: 'hidden',
   },
@@ -1054,6 +1132,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 1,
   },
+  petHint: {
+    fontFamily: 'monospace',
+    fontSize: 7,
+    color: Colors.textMuted,
+    marginTop: 1,
+    letterSpacing: 0.5,
+    opacity: 0.5,
+  },
   // Reaction Time Game
   reactionModal: {
     flex: 1,
@@ -1101,6 +1187,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     letterSpacing: 1,
+  },
+  // First-launch hints overlay
+  hintsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10,10,10,0.96)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  hintsCard: {
+    width: '100%',
+    paddingVertical: Spacing.xl,
+  },
+  hintsTitle: {
+    fontFamily: 'monospace',
+    fontSize: 14,
+    color: Colors.textPrimary,
+    letterSpacing: 3,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  hintsDivider: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginVertical: Spacing.md,
+    opacity: 0.3,
+  },
+  hintsSection: {
+    fontFamily: 'monospace',
+    fontSize: 9,
+    color: Colors.textSecondary,
+    letterSpacing: 2,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  hintsItem: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+    lineHeight: 18,
+  },
+  hintsDismiss: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    letterSpacing: 2,
+    textAlign: 'center',
   },
 });
 

@@ -409,7 +409,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>↕</Text>
             <View>
               <Text style={styles.settingName}>Swipe Gestures</Text>
-              <Text style={styles.settingDesc}>Swipe down/up on home screen</Text>
+              <Text style={styles.settingDesc}>↓ notifications · ↑ app drawer</Text>
             </View>
           </View>
           <Switch
@@ -476,7 +476,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>☔</Text>
             <View>
               <Text style={styles.settingName}>Rain Effect</Text>
-              <Text style={styles.settingDesc}>Particle drops when raining</Text>
+              <Text style={styles.settingDesc}>Falling particles when weather is rainy</Text>
             </View>
           </View>
           <Switch
@@ -492,7 +492,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>◉</Text>
             <View>
               <Text style={styles.settingName}>Pixel Pet</Text>
-              <Text style={styles.settingDesc}>ASCII creature on home screen</Text>
+              <Text style={styles.settingDesc}>ASCII pet · hold to play · health tracks usage</Text>
             </View>
           </View>
           <Switch
@@ -553,6 +553,51 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
           </View>
           <Text style={styles.settingValue}>{battery.level}%</Text>
         </View>
+
+        {/* Guide */}
+        <Text style={styles.groupLabel}>GUIDE</Text>
+
+        <View style={styles.guideBlock}>
+          <Text style={styles.guideSection}>GESTURES</Text>
+          <Text style={styles.guideItem}>↓  swipe down on home  →  notifications</Text>
+          <Text style={styles.guideItem}>↑  swipe up on home    →  app drawer</Text>
+          <Text style={styles.guideSection}>PROGRESS BARS</Text>
+          <Text style={styles.guideItem}>▬  top bar (DAY)    →  % of day elapsed</Text>
+          <Text style={styles.guideItem}>▬  thin bar (WK)    →  week progress Mon→Sun</Text>
+          <Text style={styles.guideSection}>PIXEL PET</Text>
+          <Text style={styles.guideItem}>◉  hold pet 0.6s    →  reaction time game</Text>
+          <Text style={styles.guideItem}>   health goes up when you use phone less</Text>
+          <Text style={styles.guideItem}>   health goes down with frequent pickups</Text>
+          <Text style={styles.guideSection}>PIANO DOCK</Text>
+          <Text style={styles.guideItem}>▮  press and hold key  →  shows app name</Text>
+          <Text style={styles.guideItem}>▮  rightmost key       →  opens app drawer</Text>
+          <Text style={styles.guideSection}>APP DRAWER</Text>
+          <Text style={styles.guideItem}>⌕  tap search icon     →  search by name</Text>
+          <Text style={styles.guideItem}>▤  category pills      →  filter by type</Text>
+          <Text style={styles.guideItem}>🎧 headphones plugged  →  music apps first</Text>
+          <Text style={styles.guideSection}>EFFECTS</Text>
+          <Text style={styles.guideItem}>▓  glitch    →  random char swap on clock</Text>
+          <Text style={styles.guideItem}>◇  parallax  →  tilt phone to shift clock</Text>
+          <Text style={styles.guideItem}>█  ASCII     →  block-letter clock display</Text>
+          <Text style={styles.guideItem}>☔ rain       →  falling particles when raining</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.settingItem}
+          activeOpacity={0.7}
+          onPress={async () => {
+            await AsyncStorage.removeItem('@hints_dismissed').catch(() => {});
+            navigation.navigate('Home');
+          }}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>?</Text>
+            <View>
+              <Text style={styles.settingName}>Show Welcome Hints</Text>
+              <Text style={styles.settingDesc}>Reset and show first-launch guide</Text>
+            </View>
+          </View>
+          <Text style={styles.settingValue}>→</Text>
+        </TouchableOpacity>
 
         {/* About */}
         <Text style={styles.groupLabel}>ABOUT</Text>
@@ -774,6 +819,29 @@ const styles = StyleSheet.create({
   },
   appPickerCheckSelected: {
     color: Colors.textPrimary,
+  },
+  guideBlock: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sharp,
+  },
+  guideSection: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    color: Colors.textSecondary,
+    letterSpacing: 2,
+    marginTop: Spacing.md,
+    marginBottom: 2,
+  },
+  guideItem: {
+    fontFamily: 'monospace',
+    fontSize: 9,
+    color: Colors.textMuted,
+    letterSpacing: 0.3,
+    lineHeight: 16,
   },
 });
 
