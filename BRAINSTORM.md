@@ -1,21 +1,35 @@
 # INSTRUMENT Launcher — Brainstorm v2
 
 ## ✅ Already Implemented
-- Custom dock apps (4 user-selectable)
+- Custom dock apps (4 user-selectable, piano keys design)
 - Accent color picker (10 presets, affects progress bar + quote line)
-- Smooth app open animation (scale-up + fade-out)
+- Smooth app open animation (scale-up + fade-out, 150ms)
 - Parallax clock (gyroscope tilt, toggle-able)
 - Glitch text effect (character swap, toggle-able)
 - ASCII art clock mode (box-drawing digits, toggle-able)
-- Day progress bar
+- Day progress bar with "DAY" label + percentage
+- Week progress bar with "WK" label (Mon→Sun)
 - Quote with accent-colored border
-- Quick access apps (10 max)
+- Quick access apps (10 max, spring press feedback)
 - Swipe gestures (down→notifications, up→app drawer)
-- Category filters in app drawer
-- Weather from wttr.in
+- Category filters in app drawer (6 categories)
+- Headphone context shortcuts (music apps surface first when connected)
+- Weather from wttr.in (auto-refresh 10min)
+- Rain effect (particle drops when weather reports rain, toggle-able)
+- Pixel pet (ASCII creature, health system, mood states)
+- Reaction time game (hidden: long-press pet for 0.6s)
 - Notification panel with dismiss
 - Crash logging + error boundaries
 - Settings: clock format, aesthetics toggles, gesture toggle
+- Piano keys dock (alternating white/black, press-to-reveal labels)
+- Staggered home screen mount cascade (clock→weather→quote→pet→apps→dock)
+- Touch feedback: settings gear rotation, quick app spring scale, pet long-press pulse
+- Dock slide-up animation on every home focus
+- Screen transitions: fade back-to-home (120ms), slide settings (150ms), slide drawer (100ms)
+- First-launch hints overlay (all features explained, shown once)
+- Settings GUIDE section (full feature reference)
+- "Show Welcome Hints" reset button in settings
+- Pet hint text ("hold to play · health ↑ less screen time")
 
 ---
 
@@ -109,32 +123,32 @@
 
 ## 📊 Updated Priority Matrix
 
-| Impact | Effort | Feature |
-|--------|--------|---------|
-| High | Low | Haptic feedback patterns |
-| High | Low | Breathing notification dot |
-| High | Low | Typing cursor blink |
-| High | Low | Morning intention prompt |
-| High | Medium | App frequency learning |
-| High | Medium | Focus mode (pause before launch) |
-| High | Medium | Screen pickup counter |
-| High | Medium | Terminal mode (type to launch) |
-| Medium | Low | Sunrise/sunset line |
-| Medium | Low | Moon phase indicator |
-| Medium | Low | Week progress bar |
-| Medium | Low | Binary clock mode |
-| Medium | Low | Color of the day |
-| Medium | Medium | Evening reflection log |
-| Medium | Medium | Idle terminal patterns |
-| Medium | Medium | Rain weather effect |
-| Medium | Medium | Monochrome icon mode |
-| Medium | Medium | Smart dock (time-aware) |
-| Medium | High | Pixel pet |
-| Low | Low | Tap tempo BPM |
-| Low | Low | Konami code easter egg |
-| Low | Medium | Boot animation |
-| Low | Medium | Compass heading |
-| Low | High | NFC config sharing |
+| Impact | Effort | Feature | Status |
+|--------|--------|---------|--------|
+| High | Low | Haptic feedback patterns | ⏳ next |
+| High | Low | Breathing notification dot | ⏳ next |
+| High | Low | Typing cursor blink | ⏳ next |
+| High | Low | Morning intention prompt | ⏳ next |
+| High | Medium | App frequency learning | ⏳ next |
+| High | Medium | Focus mode (pause before launch) | ⏳ |
+| High | Medium | Screen pickup counter | ⏳ next |
+| High | Medium | Terminal mode (type to launch) | ⏳ |
+| Medium | Low | Sunrise/sunset line | ⏳ |
+| Medium | Low | Moon phase indicator | ⏳ |
+| Medium | Low | Week progress bar | ✅ done |
+| Medium | Low | Binary clock mode | ⏳ |
+| Medium | Low | Color of the day | ⏳ |
+| Medium | Medium | Evening reflection log | ⏳ |
+| Medium | Medium | Idle terminal patterns | ⏳ |
+| Medium | Medium | Rain weather effect | ✅ done |
+| Medium | Medium | Monochrome icon mode | ⏳ |
+| Medium | Medium | Smart dock (time-aware) | ⏳ |
+| Medium | High | Pixel pet | ✅ done |
+| Low | Low | Tap tempo BPM | ⏳ |
+| Low | Low | Konami code easter egg | ⏳ |
+| Low | Medium | Boot animation | ⏳ |
+| Low | Medium | Compass heading | ⏳ |
+| Low | High | NFC config sharing | ⏳ |
 
 ---
 
@@ -167,9 +181,19 @@
 **Theme: "Viral / Shareable moments"**
 
 7. Boot animation — ASCII "INSTRUMENT" draws itself
-8. Rain effect — particles when weather reports rain
+8. ~~Rain effect — particles when weather reports rain~~ ✅
 9. Color of the day — auto-cycling accent color
 10. Screenshot mode — beautiful layout for sharing
+
+**Already shipped from this sprint:**
+- ✅ Rain effect (with toggle)
+- ✅ Pixel pet (health system + reaction game)
+- ✅ Week progress bar (labeled)
+- ✅ Piano dock (replaces box dock)
+- ✅ Staggered animations + touch feedback
+- ✅ Feature discoverability (hints overlay + settings guide + inline labels)
+- ✅ Headphone context shortcuts
+- ✅ AppDrawer blank screen fix
 
 ---
 
@@ -179,17 +203,25 @@
 
 ### Current State (what we have)
 
-| Where | What | Duration | Issue |
-|-------|------|----------|-------|
-| Home mount | Fade-in + slide-up | 400ms | Fine but could stagger elements |
-| App launch | Scale 1→1.04 + fade-out | 150ms | Good — fast, deliberate |
-| Piano key press | Spring scale 0.95 | ~200ms | Good — immediate tactile |
-| Navigation → AppDrawer | slide_from_bottom | 100ms | Fine |
-| Navigation → Settings | slide_from_right | default | Slightly slow, no exit anim |
-| Rain drops | Continuous fall loop | 2-4s per cycle | OK but feels mechanical |
-| Glitch text | Random char swap | 80ms flash | Good |
-| Parallax clock | Spring on gyro | Continuous | Good |
-| Pet idle | Opacity toggle | 1.5s interval | Feels stiff, not alive |
+| Where | What | Duration | Status |
+|-------|------|----------|--------|
+| Home mount | Staggered cascade (clock→weather→quote→pet→apps→dock) | 150ms/item, 30ms gaps | ✅ Implemented |
+| App launch | Scale 1→1.04 + fade-out | 150ms | ✅ Good |
+| Piano key press | Spring scale 0.95 + label reveal | ~200ms | ✅ Good |
+| Navigation → AppDrawer | slide_from_bottom | 100ms | ✅ Good |
+| Navigation → Settings | slide_from_right | 150ms | ✅ Fixed |
+| Navigation → Home (back) | Fade | 120ms | ✅ Fixed (was 'none') |
+| Rain drops | Continuous fall loop | 2-4s per cycle | ✅ Working |
+| Glitch text | Random char swap | 80ms flash | ✅ Good |
+| Parallax clock | Spring on gyro | Continuous | ✅ Good |
+| Pet idle | Opacity toggle | 1.5s interval | ⚠ Could be smoother |
+| Settings gear | Rotate 90° on press, spring back | ~200ms | ✅ Implemented |
+| Quick app tap | Scale 0.88→1 spring | ~200ms | ✅ Implemented |
+| Pet long-press | Pulse scale 1→1.06 during hold | 300ms loop | ✅ Implemented |
+| Dock re-entry | Slide up from bottom on every focus | Spring | ✅ Implemented |
+| Progress bars | DAY/WK labels + percentage | — | ✅ Labeled |
+| Pet hint | "hold to play" text | — | ✅ Discoverable |
+| First-launch hints | Full-screen guide overlay | — | ✅ Implemented |
 
 ### Where Animation Is Missing (Dead Zones)
 
@@ -284,19 +316,19 @@
 
 ### Priority Implementation Order
 
-| Priority | Animation | Impact | Effort |
-|----------|-----------|--------|--------|
-| P0 | Touch feedback on all tappables | Huge — removes "dead" feeling | Low |
-| P0 | Staggered home screen mount | Huge — first impression | Medium |
-| P0 | Back-to-Home fade (replace `none`) | High — removes jarring snap | Trivial |
-| P1 | Long-press visual indicator on pet | High — removes "is it working?" | Low |
-| P1 | Piano dock slide-up on focus | Medium — reinforces metaphor | Low |
-| P1 | Swipe gesture preview (proportional drag) | High — gesture feels connected | Medium |
-| P1 | Settings transition speed fix | Medium — removes sluggishness | Trivial |
-| P2 | App drawer staggered list | Medium — polish | Medium |
-| P2 | Rain fade-in/out | Low — subtlety | Low |
-| P2 | Pet smooth breathing | Low — ambient life | Low |
-| P2 | Typing cursor blink | Low — free aliveness | Trivial |
-| P3 | Loading state animations | Low — edge case | Low |
-| P3 | Weather placeholder flip | Low — polish | Medium |
-| P3 | Progress bar midnight reset | Low — rare event | Low |
+| Priority | Animation | Impact | Effort | Status |
+|----------|-----------|--------|--------|--------|
+| P0 | Touch feedback on all tappables | Huge — removes "dead" feeling | Low | ✅ Done |
+| P0 | Staggered home screen mount | Huge — first impression | Medium | ✅ Done |
+| P0 | Back-to-Home fade (replace `none`) | High — removes jarring snap | Trivial | ✅ Done |
+| P1 | Long-press visual indicator on pet | High — removes "is it working?" | Low | ✅ Done |
+| P1 | Piano dock slide-up on focus | Medium — reinforces metaphor | Low | ✅ Done |
+| P1 | Swipe gesture preview (proportional drag) | High — gesture feels connected | Medium | ⏳ |
+| P1 | Settings transition speed fix | Medium — removes sluggishness | Trivial | ✅ Done |
+| P2 | App drawer staggered list | Medium — polish | Medium | ⏳ |
+| P2 | Rain fade-in/out | Low — subtlety | Low | ⏳ |
+| P2 | Pet smooth breathing | Low — ambient life | Low | ⏳ |
+| P2 | Typing cursor blink | Low — free aliveness | Trivial | ⏳ |
+| P3 | Loading state animations | Low — edge case | Low | ⏳ |
+| P3 | Weather placeholder flip | Low — polish | Medium | ⏳ |
+| P3 | Progress bar midnight reset | Low — rare event | Low | ⏳ |
