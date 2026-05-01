@@ -9,6 +9,7 @@ import {
   Animated,
   BackHandler,
   Keyboard,
+  Clipboard,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -89,10 +90,13 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [suggestions, setSuggestions] = useState<AppInfo[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const dashboardOpacity = useRef(new Animated.Value(1)).current;
   const cursorBlink = useRef(new Animated.Value(1)).current;
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dashboard = useDashboard();
 
   // Load history on mount
@@ -101,15 +105,6 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     // Listen for app changes
     const sub = InstalledAppsEvents.addListener('onAppsChanged', clearAppCache);
     return () => sub.remove();
-  }, []);
-
-  // Auto-focus input on mount to open keyboard
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-      setIsTyping(true);
-    }, 300);
-    return () => clearTimeout(timer);
   }, []);
 
   // Cursor blink animation
@@ -133,21 +128,25 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     }).start();
   }, [isTyping, dashboardOpacity]);
 
-  // Live app suggestions while typing
+  // Live app suggestions while typing (debounced 200ms)
   useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
     if (input.length >= 2 && isTyping) {
       const q = input.trim();
       // Don't suggest for known commands
       const knownCommands = ['bat', 'battery', 'weather', 'time', 'date', 'calc', 'note', 'quote', 'net', 'wifi', 'help', 'clear', 'cls', 'settings', 'bt', 'bluetooth', 'dnd', 'display', 'gps', 'location'];
       const firstWord = q.split(/\s+/)[0].toLowerCase();
       if (!knownCommands.includes(firstWord) && !/^[=]/.test(firstWord)) {
-        searchApps(q).then(setSuggestions);
+        searchTimer.current = setTimeout(() => {
+          searchApps(q).then(setSuggestions);
+        }, 200);
       } else {
         setSuggestions([]);
       }
     } else {
       setSuggestions([]);
     }
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [input, isTyping]);
 
   // Back button handling
@@ -174,7 +173,29 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     setInput('');
     setSuggestions([]);
 
+    // Show loading for async commands
+    const asyncCmds = ['w', 'weather', 'net', 'wifi', 'network', 'b', 'bat', 'battery'];
+    const firstWord = trimmed.split(/\s+/)[0].toLowerCase();
+    if (asyncCmds.includes(firstWord)) {
+      setIsLoading(true);
+    }
+
     const result = await executeCommand(trimmed);
+    setIsLoading(false);
+
+    // Handle clear command — wipe UI results and history
+    if (result.type === 'clear') {
+      setResults([]);
+      setHistory([]);
+      return;
+    }
+
+    // Error haptic
+    if (result.type === 'error') {
+      tick();
+      setTimeout(() => tick(), 80);
+    }
+
     if (result.type !== 'error' || result.output) {
       setResults(prev => [result, ...prev].slice(0, 20));
     }
@@ -205,6 +226,21 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     tick();
     navigation.goBack();
   }, [navigation]);
+
+  // Tap result to re-run command
+  const handleResultRerun = useCallback((cmd: string) => {
+    tick();
+    setInput(cmd);
+    inputRef.current?.focus();
+  }, []);
+
+  // Long-press result to copy output
+  const handleResultCopy = useCallback((output: string, idx: number) => {
+    heavy();
+    Clipboard.setString(output);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 1500);
+  }, []);
 
   // ─── Render ──────────────────────────────────────────────
 
@@ -300,7 +336,7 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
                 <Text style={styles.dashLine}>{dashboard.date}  {dashboard.time}</Text>
               </View>
 
-              {/* Recent commands */}
+              {/* Recent commands — show output preview */}
               {history.length > 0 && (
                 <View style={styles.dashSection}>
                   <Text style={styles.dashLabel}>RECENT</Text>
@@ -315,7 +351,10 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
                         setIsTyping(true);
                         inputRef.current?.focus();
                       }}>
-                      <Text style={styles.historyInput} numberOfLines={1}>{h.input}</Text>
+                      <View style={styles.historyLeft}>
+                        <Text style={styles.historyInput} numberOfLines={1}>{h.input}</Text>
+                        {h.output ? <Text style={styles.historyOutput} numberOfLines={1}>{h.output}</Text> : null}
+                      </View>
                       <Text style={styles.historyTime}>{formatTimeAgo(h.timestamp)}</Text>
                     </TouchableOpacity>
                   ))}
@@ -330,19 +369,31 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
           )}
         </Animated.View>
 
-        {/* Command results (shown when typing/after commands) */}
-        {results.length > 0 && isTyping && (
+        {/* Loading indicator */}
+        {isLoading && (
+          <View style={styles.loadingWrap}>
+            <Text style={styles.loadingText}>fetching...</Text>
+          </View>
+        )}
+
+        {/* Command results (always visible) */}
+        {results.length > 0 && (
           <View style={styles.resultsWrap}>
             {results.slice(0, 10).map((r, i) => (
-              <View key={`${r.timestamp}-${i}`} style={styles.resultBlock}>
+              <TouchableOpacity
+                key={`${r.timestamp}-${i}`}
+                style={styles.resultBlock}
+                activeOpacity={0.6}
+                onPress={() => handleResultRerun(r.input)}
+                onLongPress={() => handleResultCopy(r.output, i)}>
                 <Text style={styles.resultInput}>{'>'} {r.input}</Text>
                 <Text style={[
                   styles.resultOutput,
                   r.type === 'error' && styles.resultError,
                   r.type === 'launch' && styles.resultLaunch,
-                ]}>{r.output}</Text>
+                ]}>{copiedIdx === i ? '✓ copied' : r.output}</Text>
                 {r.secondary ? <Text style={styles.resultSecondary}>{r.secondary}</Text> : null}
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -466,15 +517,23 @@ const styles = StyleSheet.create({
   historyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 5,
+  },
+  historyLeft: {
+    flex: 1,
+    marginRight: Spacing.md,
   },
   historyInput: {
     fontFamily: 'monospace',
     fontSize: 13,
     color: Colors.textSecondary,
-    flex: 1,
-    marginRight: Spacing.md,
+  },
+  historyOutput: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 1,
   },
   historyTime: {
     fontFamily: 'monospace',
@@ -490,6 +549,17 @@ const styles = StyleSheet.create({
   },
   hintCmd: {
     color: Colors.textSecondary,
+  },
+  // Loading
+  loadingWrap: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+  },
+  loadingText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
   },
   // Results
   resultsWrap: {

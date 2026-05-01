@@ -13,7 +13,7 @@ import {STORAGE_KEYS} from '../constants';
 // ─── Types ───────────────────────────────────────────────
 
 export interface CommandResult {
-  type: 'text' | 'launch' | 'error' | 'list';
+  type: 'text' | 'launch' | 'error' | 'list' | 'clear';
   output: string;
   secondary?: string;
   timestamp: number;
@@ -171,17 +171,30 @@ export async function executeCommand(input: string): Promise<CommandResult> {
       return result;
     }
 
-    // ─── Calc ───
-    if (cmd === 'calc' || cmd === '=') {
-      const expr = args || trimmed.slice(cmd.length).trim();
+    // ─── Calc (also handles =expr shorthand) ───
+    if (cmd === 'calc' || cmd === '=' || trimmed.startsWith('=')) {
+      let expr: string;
+      if (trimmed.startsWith('=')) {
+        expr = trimmed.slice(1).trim();
+      } else {
+        expr = args || trimmed.slice(cmd.length).trim();
+      }
       if (!expr) return {type: 'error', output: 'usage: calc <expression>', input: trimmed, timestamp: now};
-      // Safe eval: only allow numbers, operators, parens, dots
-      if (!/^[\d\s+\-*/().%]+$/.test(expr)) {
+      // Safe eval: allow numbers, operators, parens, dots, ** for power
+      if (!/^[\d\s+\-*/().%*^]+$/.test(expr)) {
         return {type: 'error', output: '✕ invalid expression', input: trimmed, timestamp: now};
       }
       try {
+        // Replace ^ with ** for power operator
+        const safeExpr = expr.replace(/\^/g, '**');
         // eslint-disable-next-line no-eval
-        const val = Function(`"use strict"; return (${expr})`)();
+        const val = Function(`"use strict"; return (${safeExpr})`)();
+        if (val === Infinity || val === -Infinity) {
+          return {type: 'error', output: '✕ division by zero', input: trimmed, timestamp: now};
+        }
+        if (Number.isNaN(val)) {
+          return {type: 'error', output: '✕ undefined result', input: trimmed, timestamp: now};
+        }
         const output = `→ ${val}`;
         pushHistory({input: trimmed, output, timestamp: now});
         return {type: 'text', output, input: trimmed, timestamp: now};
@@ -192,16 +205,38 @@ export async function executeCommand(input: string): Promise<CommandResult> {
 
     // ─── Note ───
     if (cmd === 'note' || cmd === 'n') {
+      // Sub-commands: note clear, note del <n>
+      const subCmd = parts[1]?.toLowerCase();
+      if (subCmd === 'clear') {
+        await AsyncStorage.setItem(NOTES_KEY, '[]');
+        const output = '✓ all notes cleared';
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
+      if (subCmd === 'del' || subCmd === 'delete') {
+        const idx = parseInt(parts[2], 10);
+        const notes = await getNotes();
+        if (isNaN(idx) || idx < 1 || idx > notes.length) {
+          return {type: 'error', output: `usage: note del <1-${notes.length || 1}>`, input: trimmed, timestamp: now};
+        }
+        notes.splice(idx - 1, 1);
+        await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+        const output = `✓ note #${idx} deleted`;
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
+      }
       if (!args) {
-        // Show recent notes
+        // Show recent notes (numbered for deletion)
         const notes = await getNotes();
         if (notes.length === 0) return {type: 'text', output: 'no notes yet', input: trimmed, timestamp: now};
-        const recent = notes.slice(0, 5).map(n => {
+        const recent = notes.slice(0, 8).map((n, i) => {
           const d = new Date(n.timestamp);
           const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-          return `  ${time}  ${n.text}`;
+          return `  ${i + 1}. ${time}  ${n.text}`;
         }).join('\n');
-        return {type: 'text', output: recent, input: trimmed, timestamp: now};
+        const output = recent + (notes.length > 8 ? `\n  ... +${notes.length - 8} more` : '');
+        pushHistory({input: trimmed, output, timestamp: now});
+        return {type: 'text', output, input: trimmed, timestamp: now};
       }
       await addNote(args);
       const output = `✓ saved`;
@@ -215,9 +250,11 @@ export async function executeCommand(input: string): Promise<CommandResult> {
         const q = await AsyncStorage.getItem(STORAGE_KEYS.quote);
         return {type: 'text', output: q ? `"${q}"` : 'no quote set', input: trimmed, timestamp: now};
       }
+      const truncated = args.length > 100;
       await AsyncStorage.setItem(STORAGE_KEYS.quote, args.slice(0, 100));
-      pushHistory({input: trimmed, output: '✓ quote updated', timestamp: now});
-      return {type: 'text', output: '✓ quote updated', input: trimmed, timestamp: now};
+      const output = truncated ? '✓ quote updated (truncated to 100 chars)' : '✓ quote updated';
+      pushHistory({input: trimmed, output, timestamp: now});
+      return {type: 'text', output, input: trimmed, timestamp: now};
     }
 
     // ─── Connectivity ───
@@ -228,7 +265,8 @@ export async function executeCommand(input: string): Promise<CommandResult> {
       if (!info.isConnected) {
         lines.push('✕ offline');
       } else if (info.isWifi) {
-        lines.push(`◦ ${info.wifiName || 'WiFi'}  ·  connected`);
+        const name = info.wifiName && !info.wifiName.toLowerCase().includes('unknown') ? info.wifiName : 'WiFi';
+        lines.push(`◦ ${name}  ·  connected`);
       } else if (info.isCellular) {
         lines.push('◦ LTE  ·  cellular');
       }
@@ -268,8 +306,11 @@ export async function executeCommand(input: string): Promise<CommandResult> {
         '  b | battery   battery info',
         '  w | weather   current weather',
         '  t | time      full date/time',
-        '  calc <expr>   calculator',
+        '  calc <expr>   calculator (+ - * / ^ %)',
+        '  =<expr>       calc shorthand',
         '  note [text]   save or list notes',
+        '  note del <n>  delete note by number',
+        '  note clear    clear all notes',
         '  quote [text]  view or set quote',
         '  net | wifi    connectivity info',
         '  settings      system settings',
@@ -277,16 +318,17 @@ export async function executeCommand(input: string): Promise<CommandResult> {
         '  dnd           do not disturb',
         '  display       display settings',
         '  gps           location settings',
-        '  clear         clear history',
+        '  clear         clear results & history',
         '  help          this message',
       ].join('\n');
+      pushHistory({input: trimmed, output: '(help)', timestamp: now});
       return {type: 'text', output, input: trimmed, timestamp: now};
     }
 
     // ─── Clear ───
     if (cmd === 'clear' || cmd === 'cls') {
       await AsyncStorage.setItem(HISTORY_KEY, '[]');
-      return {type: 'text', output: '✓ history cleared', input: trimmed, timestamp: now};
+      return {type: 'clear', output: '✓ cleared', input: trimmed, timestamp: now};
     }
 
     // ─── Default: fuzzy app search + launch ───

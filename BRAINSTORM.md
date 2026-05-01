@@ -258,6 +258,229 @@ These were removed in v1.2 sprint and no longer exist in the codebase:
 4. Morning intention prompt
 5. App usage frequency sort
 
+---
+
+## 🔍 Terminal Audit — Corner Cases, Bugs, UX Improvements
+
+> Full audit of TerminalScreen.tsx + commandParser.ts as of v1.3.1
+> Updated: post v1.3.2 bug fix + polish pass
+
+### 🐛 BUGS — STATUS
+
+**1. ~~Auto-focus kills dashboard visibility~~** ✅ FIXED
+- Removed auto-focus on mount. Dashboard now visible by default.
+- User taps the input to start typing — natural, no ambiguity.
+
+**2. ~~`clear` command doesn't clear the UI results~~** ✅ FIXED
+- `clear` now returns `type: 'clear'` → TerminalScreen wipes `results[]` and `history[]`.
+
+**3. ~~`=` shortcut broken without space~~** ✅ FIXED
+- `=2+3` now works. Parser checks `trimmed.startsWith('=')` and slices from index 1.
+
+**4. ~~`calc` edge cases produce confusing output~~** ✅ FIXED
+- `calc 1/0` → "✕ division by zero". `calc 0/0` → "✕ undefined result".
+- `calc 2^3` → "→ 8" (^ aliased to **, whitelist updated).
+
+**5. ~~Results disappear when keyboard dismissed~~** ✅ FIXED
+- Results always visible when `results.length > 0`, no longer gated on `isTyping`.
+
+**6. ~~`note` listing doesn't save to history~~** ✅ FIXED
+- `note` (list) now calls `pushHistory()`. Shows in RECENT.
+
+**7. Dashboard time doesn't respect clock format setting** ❌ DEFERRED
+- Needs `useSettings()` hook refactor to share clock format across screens.
+
+**8. ~~`help` command doesn't save to history~~** ✅ FIXED
+- `help` now calls `pushHistory()`. Shows in RECENT.
+
+---
+
+### ⚠️ MISSING FEATURES (should add)
+
+**9. No command autocomplete / tab-complete**
+- Typing "bat" should show a ghost suggestion "battery" (inline or dropdown)
+- Typing "set" → "settings", "dis" → "display", etc.
+- Would dramatically speed up usage and teach users the commands
+
+**10. ~~No loading state for async commands~~** ✅ FIXED
+- Shows "fetching..." while weather/battery/net commands are running.
+
+**11. ~~No `note delete` or `note clear`~~** ✅ FIXED
+- `note del <n>` — delete note by number (1-indexed)
+- `note clear` — wipe all notes
+- Notes now listed numbered: `1. 14:30 buy milk`
+- Help text updated with new sub-commands
+
+**12. No `note search`**
+- 100 notes but no way to search them
+- `note find <keyword>` would be useful
+
+**13. No timer/alarm/reminder command**
+- Was in the original brainstorm: `timer 5m` → countdown notification
+- High value, frequently needed
+
+**14. No `dial` or `call` command**
+- Was in original brainstorm: `dial <number>` → opens dialer
+- Trivial to implement with `Linking.openURL('tel:...')`
+
+**15. No `open <url>` command**
+- `open google.com` → opens browser
+- Trivial: `Linking.openURL('https://...')`
+
+**16. No `vol` / `volume` command**
+- Check or set media volume — common need when headphones are connected
+- Needs native module for AudioManager
+
+**17. No `flash` / `torch` command**
+- Toggle flashlight — useful utility
+- Needs native CameraManager module
+
+**18. No `share` command**
+- `share <text>` → opens Android share sheet
+- `Share` API from React Native makes this trivial
+
+**19. No `qr` command**
+- `qr <text>` → generate QR code displayed inline
+- Useful for sharing URLs, WiFi passwords, etc.
+
+**20. No `uninstall <app>` command**
+- Already have app search, could add `uninstall spotify` → confirm → uninstall intent
+
+---
+
+### 🎨 UX POLISH (should improve)
+
+**21. ~~Fuzzy search has no debounce~~** ✅ FIXED
+- Added 200ms debounce timer. Cleans up on each keystroke.
+
+**22. No keyboard shortcut awareness**
+- Hardware keyboard users (BT keyboards) can't use Ctrl+C, Ctrl+L, up/down arrows
+- Up arrow for previous command is the #1 expected terminal behavior
+- Not critical for phone-only usage, but matters for tablet/desktop mode
+
+**23. ~~History items should show the OUTPUT too~~** ✅ FIXED
+- RECENT rows now show input + output preview (muted, below).
+
+**24. ~~No haptic on error~~** ✅ FIXED
+- Errors now trigger double-tick haptic (tick + 80ms + tick).
+
+**25. No keyboard-first suggestion selection**
+- When app suggestions appear, user must tap them
+- Enter should select the first suggestion (or the highlighted one)
+- Currently Enter runs `handleSubmit` which treats input as a command
+
+**26. ~~No "run again" button on results~~** ✅ FIXED
+- Tapping any result block re-runs that command (sets input + focuses).
+
+**27. No visual difference between command types**
+- Launch, text, error, and list results all look similar
+- Could use accent color for success, muted for info, red tint for error
+- `styles.resultError` and `styles.resultLaunch` exist but may need more contrast
+
+**28. Dashboard sections have no refresh button**
+- Battery and connectivity can go stale (30s refresh interval)
+- Pull-to-refresh or a tiny `↻` icon on VITALS would help
+
+**29. Empty state when no history AND isTyping**
+- If user has no history and starts typing but hasn't submitted yet, screen is blank (dashboard hidden, no results)
+- Should show a subtle placeholder: example commands, or "press enter to run"
+
+**30. ESC button placement**
+- ESC is top-right — easy to hit accidentally when reaching for backspace
+- Consider moving to top-left, or making it a swipe-down gesture instead
+
+**31. No swipe-to-dismiss gesture**
+- Terminal opens via swipe-down, but closes only via ESC button or back button
+- Swipe up to dismiss would be natural and symmetric
+
+**32. Long command output truncation**
+- `note` listing can show up to 5 notes, each potentially long
+- `help` output is 15 lines — takes up entire screen
+- No scrolling within a result block, relies on outer ScrollView
+- Should collapse long results with "show more" toggle
+
+**33. ~~No clipboard integration~~** ✅ FIXED
+- Long-press any result → copies output to clipboard, shows "✓ copied" (1.5s).
+- Uses heavy haptic for tactile confirmation.
+
+**34. ~~`quote` command truncation is silent~~** ✅ FIXED
+- Now shows "✓ quote updated (truncated to 100 chars)" when over limit.
+
+**35. No multi-word app search intelligence**
+- Typing "youtube music" → fuzzy matches against whole string
+- But `fuzzyMatch('youtube music', 'YouTube Music')` → exact match 100 → works
+- Typing "yt music" → `fuzzyMatch` checks includes/initials of `'youtube music'` vs `'yt music'` → initials='ym' vs query='yt music' → no match → fails
+- Should split query words and match each independently
+
+---
+
+### 🧠 SMART FEATURES (stretch goals)
+
+**36. Context-aware suggestions**
+- Low battery → suggest "battery saver" settings
+- Headphones connected → suggest music apps
+- Late night → suggest alarm/timer
+- No internet → skip weather, show offline indicator
+
+**37. Command aliases / user shortcuts**
+- Let users create custom aliases: `alias s=spotify`, then `s` launches Spotify
+- Power user feature, store in AsyncStorage
+
+**38. Piped commands**
+- `battery | note` → saves battery output as a note
+- `weather | copy` → copies weather to clipboard
+- Aspirational, but fits the terminal identity perfectly
+
+**39. Command frequency-based sorting**
+- If user types "b" 50 times for battery and "bt" 5 times for bluetooth
+- Suggestions should rank battery higher
+- Store command frequency, use it to weight fuzzy matches
+
+**40. Ambient mode (idle terminal)**
+- If terminal is open with no input for 10s, show ambient data
+- Slowly cycle through: battery level, time, weather, pet status
+- Screensaver-like behavior, information-dense
+
+---
+
+### 📊 Priority for Terminal Polish
+
+| Priority | Item | Status |
+|----------|------|--------|
+| 🔴 P0 | #1 Fix auto-focus killing dashboard | ✅ FIXED |
+| 🔴 P0 | #2 Clear command should clear UI | ✅ FIXED |
+| 🔴 P0 | #5 Results visible without keyboard | ✅ FIXED |
+| 🟠 P1 | #3 Fix `=` shortcut without space | ✅ FIXED |
+| 🟠 P1 | #4 Calc Infinity/NaN handling | ✅ FIXED |
+| 🟠 P1 | #6 Note listing history | ✅ FIXED |
+| 🟠 P1 | #8 Help saves to history | ✅ FIXED |
+| 🟠 P1 | #10 Loading state for weather | ✅ FIXED |
+| 🟠 P1 | #11 Note delete/clear | ✅ FIXED |
+| 🟠 P1 | #21 Debounce fuzzy search | ✅ FIXED |
+| 🟠 P1 | #23 Show output in history rows | ✅ FIXED |
+| 🟠 P1 | #24 Error haptic pattern | ✅ FIXED |
+| 🟠 P1 | #26 Tap result to re-run | ✅ FIXED |
+| 🟠 P1 | #33 Copy result on long-press | ✅ FIXED |
+| 🟠 P1 | #34 Quote truncation feedback | ✅ FIXED |
+| 🟡 P2 | #7 Respect clock format setting | ❌ Deferred |
+| 🟡 P2 | #9 Command autocomplete | ❌ Open |
+| 🟡 P2 | #14 Dial command | ❌ Open |
+| 🟡 P2 | #15 Open URL command | ❌ Open |
+| 🟡 P2 | #25 Keyboard suggestion select | ❌ Open |
+| 🟡 P2 | #31 Swipe-up to dismiss | ❌ Open |
+| 🟢 P3 | #13 Timer/alarm command | ❌ Open |
+| 🟢 P3 | #16 Volume command | ❌ Open |
+| 🟢 P3 | #17 Flashlight command | ❌ Open |
+| 🟢 P3 | #18 Share command | ❌ Open |
+| 🟢 P3 | #29 Typing empty state | ❌ Open |
+| 🟢 P3 | #32 Long output collapse | ❌ Open |
+| 🟢 P3 | #35 Multi-word search split | ❌ Open |
+| 🔵 P4 | #36 Context-aware suggestions | ❌ Open |
+| 🔵 P4 | #37 User aliases | ❌ Open |
+| 🔵 P4 | #38 Piped commands | ❌ Open |
+| 🔵 P4 | #39 Frequency-based sorting | ❌ Open |
+| 🔵 P4 | #40 Ambient idle mode | ❌ Open |
+
 ### v1.5 — "Ambient intelligence"
 1. Sunrise/sunset line
 2. Notification badge dots
