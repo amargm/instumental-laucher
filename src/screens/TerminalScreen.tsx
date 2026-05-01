@@ -9,8 +9,8 @@ import {
   Animated,
   BackHandler,
   Keyboard,
-  Clipboard,
 } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {tick, impact, heavy} from '../native/Haptics';
@@ -164,6 +164,12 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     });
     return () => handler.remove();
   }, [isTyping, navigation]);
+
+  // Dismiss keyboard when navigating away from this screen
+  useEffect(() => {
+    const unsub = navigation.addListener('blur', () => Keyboard.dismiss());
+    return unsub;
+  }, [navigation]);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();

@@ -27,6 +27,8 @@ import {
 import {isHeadphonesConnected} from '../native/DeviceInfo';
 import {APP_ICON_MAP} from '../components/AppIcons';
 import {impact, heavy} from '../native/Haptics';
+import {MUSIC_KEYWORDS} from '../constants';
+import {NavItem} from '../components/NavItem';
 
 // Module-level cache so apps persist between navigations
 let cachedApps: AppInfo[] = [];
@@ -153,7 +155,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       cachedApps = unique;
       setApps(unique);
     } catch (e) {
-      console.warn('Failed to load apps:', e);
+      // Silent in production
     } finally {
       setLoading(false);
     }
@@ -181,8 +183,6 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     {label: 'TOOLS', keywords: ['calculator', 'clock', 'weather', 'files', 'settings', 'manager', 'cleaner', 'vpn', 'browser', 'chrome', 'firefox']},
     {label: 'SHOP', keywords: ['amazon', 'flipkart', 'shopping', 'store', 'pay', 'wallet', 'bank', 'money', 'gpay', 'phonepe', 'paytm']},
   ];
-
-  const MUSIC_KEYWORDS = ['music', 'spotify', 'player', 'podcast', 'audio', 'sound', 'radio', 'youtube music', 'gaana', 'wynk', 'jiosaavn'];
 
   const filteredApps = (() => {
     let result = apps.filter(app => {
@@ -387,18 +387,27 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   );
 };
 
-// Icon cache to avoid re-fetching
-const iconCache: Record<string, string> = {};
+// LRU icon cache — max 80 entries to prevent unbounded memory growth
+const MAX_ICON_CACHE = 80;
+const iconCache = new Map<string, string>();
+function cacheIcon(key: string, value: string) {
+  if (iconCache.size >= MAX_ICON_CACHE) {
+    // Evict oldest entry (first key in Map insertion order)
+    const oldest = iconCache.keys().next().value;
+    if (oldest !== undefined) iconCache.delete(oldest);
+  }
+  iconCache.set(key, value);
+}
 
 const AppItem = memo(({item, onPress, onLongPress, index, staggerAnim}: {item: AppInfo; onPress: (pkg: string) => void; onLongPress?: (pkg: string) => void; index?: number; staggerAnim?: Animated.Value}) => {
-  const [icon, setIcon] = useState<string>(iconCache[item.packageName] || '');
+  const [icon, setIcon] = useState<string>(iconCache.get(item.packageName) || '');
   const CustomIcon = APP_ICON_MAP[item.packageName];
 
   useEffect(() => {
     if (!CustomIcon && !icon) {
       getAppIcon(item.packageName).then(b64 => {
         if (b64) {
-          iconCache[item.packageName] = b64;
+          cacheIcon(item.packageName, b64);
           setIcon(b64);
         }
       });
@@ -443,16 +452,6 @@ const AppItem = memo(({item, onPress, onLongPress, index, staggerAnim}: {item: A
 
   return content;
 });
-
-const NavItem: React.FC<{label: string; active: boolean; onPress?: () => void}> = ({
-  label,
-  active,
-  onPress,
-}) => (
-  <TouchableOpacity style={styles.navItem} activeOpacity={0.7} onPress={onPress}>
-    <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
-  </TouchableOpacity>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -593,18 +592,6 @@ const styles = StyleSheet.create({
     height: 48,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-  },
-  navItem: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-  },
-  navLabel: {
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 1.5,
-  },
-  navLabelActive: {
-    color: Colors.textPrimary,
   },
   emptyState: {
     paddingVertical: 40,

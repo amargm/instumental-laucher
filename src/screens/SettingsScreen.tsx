@@ -21,6 +21,7 @@ interface Props {
 
 import {STORAGE_KEYS} from '../constants';
 import {tick, impact} from '../native/Haptics';
+import {NavItem} from '../components/NavItem';
 
 const ACCENT_COLORS = [
   '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96E6A1',
@@ -599,21 +600,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   );
 };
 
-const NavItem: React.FC<{label: string; active: boolean; onPress?: () => void}> = ({
-  label,
-  active,
-  onPress,
-}) => (
-  <TouchableOpacity
-    style={styles.navItem}
-    activeOpacity={0.7}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityLabel={label}>
-    <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
-  </TouchableOpacity>
-);
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -724,18 +710,6 @@ const styles = StyleSheet.create({
     height: 48,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-  },
-  navItem: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-  },
-  navLabel: {
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 1.5,
-  },
-  navLabelActive: {
-    color: Colors.textPrimary,
   },
   // App Picker
   appPickerList: {

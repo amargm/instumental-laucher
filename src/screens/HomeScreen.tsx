@@ -28,7 +28,8 @@ import ReanimatedAnimated, {
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
 import {getConnectedAudioDevice, AudioDeviceInfo} from '../native/DeviceInfo';
-import {STORAGE_KEYS} from '../constants';
+import {STORAGE_KEYS, MUSIC_KEYWORDS, AUDIO_POLL_INTERVAL, WEATHER_REFRESH_INTERVAL, PET_FEED_GAP, PET_SPAM_THRESHOLD} from '../constants';
+import {useAppActive} from '../hooks/useAppActive';
 import {tick, impact, heavy} from '../native/Haptics';
 import {
   SettingsIcon,
@@ -39,8 +40,6 @@ import {APP_ICON_MAP} from '../components/AppIcons';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-const MUSIC_KEYWORDS = ['music', 'spotify', 'player', 'podcast', 'audio', 'sound', 'radio', 'gaana', 'wynk', 'jiosaavn', 'youtube music'];
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 
@@ -62,15 +61,17 @@ const GLITCH_CHARS = '0123456789▐░▒▓─│┤├';
 const RAIN_CHARS = ['·', ':', '.', '|', '¦'];
 const NUM_DROPS = 20;
 
-const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string}) => {
+const RainDrop = memo(({delay, accentColor, active}: {delay: number; accentColor: string; active: boolean}) => {
   const fallAnim = useRef(new Animated.Value(-20)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const x = useRef(Math.random() * SCREEN_WIDTH).current;
   const mountedRef = useRef(true);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   useEffect(() => {
     const startDrop = () => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !activeRef.current) return;
       fallAnim.setValue(-20);
       opacity.setValue(0.3 + Math.random() * 0.4);
       Animated.timing(fallAnim, {
@@ -87,6 +88,26 @@ const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string
     };
   }, []);
 
+  // Pause/resume when app goes background/foreground
+  useEffect(() => {
+    if (active) {
+      // Resume: restart the loop
+      const startDrop = () => {
+        if (!mountedRef.current || !activeRef.current) return;
+        fallAnim.setValue(-20);
+        opacity.setValue(0.3 + Math.random() * 0.4);
+        Animated.timing(fallAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 2000 + Math.random() * 2000,
+          useNativeDriver: true,
+        }).start(() => startDrop());
+      };
+      startDrop();
+    } else {
+      fallAnim.stopAnimation();
+    }
+  }, [active]);
+
   const char = RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)];
 
   return (
@@ -100,7 +121,7 @@ const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string
   );
 });
 
-const RainEffect = memo(({accentColor}: {accentColor: string}) => {
+const RainEffect = memo(({accentColor, active}: {accentColor: string; active: boolean}) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -113,7 +134,7 @@ const RainEffect = memo(({accentColor}: {accentColor: string}) => {
   return (
     <Animated.View style={[styles.rainContainer, {opacity: fadeAnim}]} pointerEvents="none">
       {Array.from({length: NUM_DROPS}, (_, i) => (
-        <RainDrop key={i} delay={i * 200} accentColor={accentColor} />
+        <RainDrop key={i} delay={i * 200} accentColor={accentColor} active={active} />
       ))}
     </Animated.View>
   );
@@ -132,21 +153,28 @@ const PET_BODIES = {
   sad:     ' /|  |\\',
 };
 
-const PixelPet = memo(({health, accentColor}: {health: number; accentColor: string}) => {
+const PixelPet = memo(({health, accentColor, active}: {health: number; accentColor: string; active: boolean}) => {
   const breatheAnim = useRef(new Animated.Value(1)).current;
+  const loopRef = useRef<Animated.CompositeAnimation | null>(null);
   const mood = health > 70 ? 'happy' : health > 30 ? 'neutral' : 'sad';
 
-  // Smooth sinusoidal breathing (scale 1.0→1.03→1.0, 2s cycle)
+  // Smooth sinusoidal breathing — pauses when app backgrounded
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breatheAnim, {toValue: 1.03, duration: 1000, useNativeDriver: true}),
-        Animated.timing(breatheAnim, {toValue: 1, duration: 1000, useNativeDriver: true}),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
+    if (active) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breatheAnim, {toValue: 1.03, duration: 1000, useNativeDriver: true}),
+          Animated.timing(breatheAnim, {toValue: 1, duration: 1000, useNativeDriver: true}),
+        ])
+      );
+      loopRef.current = loop;
+      loop.start();
+      return () => loop.stop();
+    } else {
+      loopRef.current?.stop();
+      breatheAnim.setValue(1);
+    }
+  }, [active]);
 
   return (
     <View style={styles.petContainer}>
@@ -163,16 +191,13 @@ const PixelPet = memo(({health, accentColor}: {health: number; accentColor: stri
 });
 
 // ─── Memoized Clock Component with parallax + glitch ───
-const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnabled}: {clockFormat: '12' | '24'; accentColor: string; glitchEnabled: boolean; parallaxEnabled: boolean}) => {
-  const [time, setTime] = useState('');
-  const [displayTime, setDisplayTime] = useState('');
-  const timeRef = useRef('');
-  const [date, setDate] = useState('');
-  const [dayProgress, setDayProgress] = useState(0);
-  const [weekProgress, setWeekProgress] = useState(0);
-  const [cursorVisible, setCursorVisible] = useState(true);
+// Parallax wrapper: only mounts the sensor when parallaxEnabled=true
+const ParallaxWrapper = memo(({enabled, children}: {enabled: boolean; children: React.ReactNode}) => {
+  if (!enabled) return <>{children}</>;
+  return <ParallaxInner>{children}</ParallaxInner>;
+});
 
-  // Parallax via gyroscope
+const ParallaxInner = memo(({children}: {children: React.ReactNode}) => {
   const sensor = useAnimatedSensor(SensorType.ROTATION, {interval: 60});
   const parallaxStyle = useAnimatedStyle(() => {
     const {pitch, roll} = sensor.sensor.value;
@@ -183,6 +208,17 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
       ],
     };
   });
+  return <ReanimatedAnimated.View style={parallaxStyle}>{children}</ReanimatedAnimated.View>;
+});
+
+const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnabled}: {clockFormat: '12' | '24'; accentColor: string; glitchEnabled: boolean; parallaxEnabled: boolean}) => {
+  const [time, setTime] = useState('');
+  const [displayTime, setDisplayTime] = useState('');
+  const timeRef = useRef('');
+  const [date, setDate] = useState('');
+  const [dayProgress, setDayProgress] = useState(0);
+  const [weekProgress, setWeekProgress] = useState(0);
+  const [cursorVisible, setCursorVisible] = useState(true);
 
   useEffect(() => {
     const updateClock = () => {
@@ -303,9 +339,9 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
 
   return (
     <View style={styles.widget}>
-      <ReanimatedAnimated.View style={parallaxEnabled ? parallaxStyle : undefined}>
+      <ParallaxWrapper enabled={parallaxEnabled}>
         <Text style={styles.time}>{displayTime}<Text style={[styles.cursor, {opacity: cursorVisible ? 1 : 0}]}>_</Text></Text>
-      </ReanimatedAnimated.View>
+      </ParallaxWrapper>
       <View style={styles.progressRow}>
         <Text style={styles.progressLabel}>DAY</Text>
         <View style={[styles.progressWrap, {flex: 1}]}>
@@ -329,6 +365,7 @@ interface Props {
 }
 
 const HomeScreen: React.FC<Props> = ({navigation}) => {
+  const appActive = useAppActive();
   const [clockFormat, setClockFormat] = useState<'24' | '12'>('24');
   const [quote, setQuote] = useState('');
   const [quickApps, setQuickApps] = useState<string[]>([]);
@@ -365,10 +402,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const launchOpacity = useRef(new Animated.Value(1)).current;
   const lastNavRef = useRef(0);
 
-  // Debounced navigation to prevent double-taps
+  // Debounced navigation to prevent double-taps — resets on animation complete
   const navigateTo = useCallback((screen: string) => {
     const now = Date.now();
-    if (now - lastNavRef.current < 400) return;
+    if (now - lastNavRef.current < 300) return;
     lastNavRef.current = now;
     navigation.navigate(screen);
   }, [navigation]);
@@ -425,32 +462,39 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return () => sub.remove();
   }, [launchScale, launchOpacity]);
 
-  // Load settings
+  // Load settings — batched read
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
+        const keys = [
+          STORAGE_KEYS.clockFormat, STORAGE_KEYS.quote, STORAGE_KEYS.quickApps,
+          STORAGE_KEYS.dockApps, STORAGE_KEYS.accentColor, STORAGE_KEYS.glitchEnabled,
+          STORAGE_KEYS.parallaxEnabled, STORAGE_KEYS.rainEnabled, STORAGE_KEYS.petEnabled,
+          STORAGE_KEYS.gesturesEnabled, STORAGE_KEYS.hintsDismissed,
+        ];
+        const entries = await AsyncStorage.multiGet(keys);
+        const m = new Map(entries);
+        const fmt = m.get(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
-        const q = await AsyncStorage.getItem(STORAGE_KEYS.quote);
+        const q = m.get(STORAGE_KEYS.quote);
         if (q) setQuote(q);
-        const apps = await AsyncStorage.getItem(STORAGE_KEYS.quickApps);
+        const apps = m.get(STORAGE_KEYS.quickApps);
         if (apps) setQuickApps(JSON.parse(apps));
-        const dock = await AsyncStorage.getItem(STORAGE_KEYS.dockApps);
+        const dock = m.get(STORAGE_KEYS.dockApps);
         if (dock) setDockApps(JSON.parse(dock));
-        const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
+        const accent = m.get(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
-        const glitch = await AsyncStorage.getItem(STORAGE_KEYS.glitchEnabled);
-        if (glitch !== null) setGlitchEnabled(glitch === 'true');
-        const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
-        if (parallax !== null) setParallaxEnabled(parallax === 'true');
-        const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
-        if (rain !== null) setRainEnabled(rain === 'true');
-        const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
-        if (pet !== null) setPetEnabled(pet === 'true');
-        const ge = await AsyncStorage.getItem(STORAGE_KEYS.gesturesEnabled);
-        if (ge !== null) { setGesturesEnabled(ge === 'true'); gesturesRef.current = ge === 'true'; }
-        // Show hints on first launch
-        const hintsDismissed = await AsyncStorage.getItem(STORAGE_KEYS.hintsDismissed);
+        const glitch = m.get(STORAGE_KEYS.glitchEnabled);
+        if (glitch !== null && glitch !== undefined) setGlitchEnabled(glitch === 'true');
+        const parallax = m.get(STORAGE_KEYS.parallaxEnabled);
+        if (parallax !== null && parallax !== undefined) setParallaxEnabled(parallax === 'true');
+        const rain = m.get(STORAGE_KEYS.rainEnabled);
+        if (rain !== null && rain !== undefined) setRainEnabled(rain === 'true');
+        const pet = m.get(STORAGE_KEYS.petEnabled);
+        if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
+        const ge = m.get(STORAGE_KEYS.gesturesEnabled);
+        if (ge !== null && ge !== undefined) { setGesturesEnabled(ge === 'true'); gesturesRef.current = ge === 'true'; }
+        const hintsDismissed = m.get(STORAGE_KEYS.hintsDismissed);
         if (!hintsDismissed) setShowHints(true);
       } catch (e) {}
     };
@@ -473,7 +517,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     }
   }, []);
 
-  // Reload settings on focus
+  // Reload settings on focus — batched read
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
       if (!mountedRef.current) return;
@@ -488,26 +532,34 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         Animated.timing(dockOpacity, {toValue: 1, duration: 200, useNativeDriver: true}),
       ]).start();
       try {
-        const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
+        const keys = [
+          STORAGE_KEYS.clockFormat, STORAGE_KEYS.quote, STORAGE_KEYS.quickApps,
+          STORAGE_KEYS.dockApps, STORAGE_KEYS.accentColor, STORAGE_KEYS.glitchEnabled,
+          STORAGE_KEYS.parallaxEnabled, STORAGE_KEYS.rainEnabled, STORAGE_KEYS.petEnabled,
+          STORAGE_KEYS.gesturesEnabled,
+        ];
+        const entries = await AsyncStorage.multiGet(keys);
+        const m = new Map(entries);
+        const fmt = m.get(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
-        const q = await AsyncStorage.getItem(STORAGE_KEYS.quote);
+        const q = m.get(STORAGE_KEYS.quote);
         setQuote(q || '');
-        const apps = await AsyncStorage.getItem(STORAGE_KEYS.quickApps);
+        const apps = m.get(STORAGE_KEYS.quickApps);
         if (apps) setQuickApps(JSON.parse(apps));
-        const dock = await AsyncStorage.getItem(STORAGE_KEYS.dockApps);
+        const dock = m.get(STORAGE_KEYS.dockApps);
         if (dock) setDockApps(JSON.parse(dock));
-        const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
+        const accent = m.get(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
-        const glitch = await AsyncStorage.getItem(STORAGE_KEYS.glitchEnabled);
-        if (glitch !== null) setGlitchEnabled(glitch === 'true');
-        const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
-        if (parallax !== null) setParallaxEnabled(parallax === 'true');
-        const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
-        if (rain !== null) setRainEnabled(rain === 'true');
-        const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
-        if (pet !== null) setPetEnabled(pet === 'true');
-        const ge = await AsyncStorage.getItem(STORAGE_KEYS.gesturesEnabled);
-        if (ge !== null) { setGesturesEnabled(ge === 'true'); gesturesRef.current = ge === 'true'; }
+        const glitch = m.get(STORAGE_KEYS.glitchEnabled);
+        if (glitch !== null && glitch !== undefined) setGlitchEnabled(glitch === 'true');
+        const parallax = m.get(STORAGE_KEYS.parallaxEnabled);
+        if (parallax !== null && parallax !== undefined) setParallaxEnabled(parallax === 'true');
+        const rain = m.get(STORAGE_KEYS.rainEnabled);
+        if (rain !== null && rain !== undefined) setRainEnabled(rain === 'true');
+        const pet = m.get(STORAGE_KEYS.petEnabled);
+        if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
+        const ge = m.get(STORAGE_KEYS.gesturesEnabled);
+        if (ge !== null && ge !== undefined) { setGesturesEnabled(ge === 'true'); gesturesRef.current = ge === 'true'; }
       } catch (e) {}
     });
     return unsubscribe;
@@ -520,9 +572,25 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     }).catch(() => {});
   }, []);
 
-  // Fetch weather with timeout + AbortController
+  // Fetch weather with caching, timeout + AbortController
   useEffect(() => {
     const controller = new AbortController();
+
+    // Load cached weather immediately
+    AsyncStorage.getItem(STORAGE_KEYS.cachedWeather).then(cached => {
+      if (cached && mountedRef.current && !weather) {
+        try {
+          const parsed = JSON.parse(cached);
+          setWeather(parsed);
+          const condition = parsed.condition?.toLowerCase() || '';
+          setIsRaining(
+            condition.includes('rain') || condition.includes('drizzle') ||
+            condition.includes('shower') || condition.includes('thunderstorm')
+          );
+        } catch (e) {}
+      }
+    });
+
     const fetchWeather = async () => {
       try {
         const res = await fetch('https://wttr.in/?format=%t|%C', {
@@ -533,27 +601,32 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         const parts = text.split('|');
         if (parts.length >= 2 && mountedRef.current) {
           const condition = parts[1].trim().toLowerCase();
-          setWeather({temp: parts[0].trim(), condition: parts[1].trim()});
-          // Detect rain for rain effect
+          const weatherData = {temp: parts[0].trim(), condition: parts[1].trim()};
+          setWeather(weatherData);
           setIsRaining(
             condition.includes('rain') ||
             condition.includes('drizzle') ||
             condition.includes('shower') ||
             condition.includes('thunderstorm')
           );
+          // Cache successful fetch
+          AsyncStorage.setItem(STORAGE_KEYS.cachedWeather, JSON.stringify(weatherData)).catch(() => {});
         }
-      } catch (e) {}
+      } catch (e) {
+        // On failure, keep showing cached weather (already loaded above)
+      }
     };
     fetchWeather();
-    const weatherInterval = setInterval(fetchWeather, 600000);
+    const weatherInterval = setInterval(fetchWeather, WEATHER_REFRESH_INTERVAL);
     return () => {
       controller.abort();
       clearInterval(weatherInterval);
     };
   }, []);
 
-  // Headphone detection — poll on mount, focus, and interval
+  // Headphone detection — poll on mount, focus, and interval (pauses when backgrounded)
   useEffect(() => {
+    if (!appActive) return; // Don't poll when backgrounded
     let mounted = true;
     const checkAudio = async () => {
       try {
@@ -589,9 +662,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     };
 
     checkAudio();
-    const interval = setInterval(checkAudio, 5000); // poll every 5s
+    const interval = setInterval(checkAudio, AUDIO_POLL_INTERVAL);
     return () => { mounted = false; clearInterval(interval); };
-  }, [musicBtnOpacity, musicBtnScale]);
+  }, [appActive, musicBtnOpacity, musicBtnScale]);
 
   // Also refresh audio on screen focus
   useEffect(() => {
@@ -660,12 +733,12 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         const now = Date.now();
         const gap = lastFed ? now - parseInt(lastFed, 10) : 0;
         // Feed pet if > 30 minutes since last feed (reward low screen time)
-        if (!lastFed || gap > 30 * 60 * 1000) {
+        if (!lastFed || gap > PET_FEED_GAP) {
           const newHealth = Math.min(100, petHealthRef.current + 5);
           setPetHealth(newHealth);
           await AsyncStorage.setItem(STORAGE_KEYS.petHealth, String(newHealth));
           await AsyncStorage.setItem(STORAGE_KEYS.petLastFed, String(now));
-        } else if (gap < 5 * 60 * 1000) {
+        } else if (gap < PET_SPAM_THRESHOLD) {
           // Too frequent pickups - decrease health slightly
           const newHealth = Math.max(0, petHealthRef.current - 1);
           setPetHealth(newHealth);
@@ -692,8 +765,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         swipeDragY.setValue(clamped);
       },
       onPanResponderRelease: (_, gesture) => {
-        // Spring back to rest
-        Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start();
+        // Spring back to rest — reset debounce on animation complete
+        Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start(() => {
+          lastNavRef.current = 0; // allow next gesture immediately after animation ends
+        });
         if (gesture.dy > 80) {
           heavy();
           navigateToRef.current('Terminal');
@@ -731,8 +806,14 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const settingsRotation = useRef(new Animated.Value(0)).current;
   const settingsRotationInterp = settingsRotation.interpolate({inputRange: [0, 1], outputRange: ['0deg', '90deg']});
 
-  // Quick app press feedback
+  // Quick app press feedback — clean up stale scales when quickApps change
   const quickAppScales = useRef<Record<string, Animated.Value>>({}).current;
+  useEffect(() => {
+    const validPkgs = new Set(quickApps);
+    Object.keys(quickAppScales).forEach(k => {
+      if (!validPkgs.has(k)) delete quickAppScales[k];
+    });
+  }, [quickApps]);
   const getQuickAppScale = useCallback((pkg: string) => {
     if (!quickAppScales[pkg]) quickAppScales[pkg] = new Animated.Value(1);
     return quickAppScales[pkg];
@@ -788,7 +869,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           {/* Pixel Pet — with long-press pulse indicator */}
           {petEnabled && (
           <Animated.View style={{opacity: petAnim, transform: [{translateY: petAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
-            <PixelPet health={petHealth} accentColor={accentColor} />
+            <PixelPet health={petHealth} accentColor={accentColor} active={appActive} />
           </Animated.View>
           )}
 
@@ -884,7 +965,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       </Animated.View>
 
       {/* Rain Effect — shows when weather indicates rain AND toggle is on */}
-      {isRaining && rainEnabled && <RainEffect accentColor={accentColor} />}
+      {isRaining && rainEnabled && <RainEffect accentColor={accentColor} active={appActive} />}
 
       {/* First-launch hints overlay */}
       {showHints && (

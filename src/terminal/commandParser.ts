@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {APP_CACHE_TTL} from '../constants';
 import {getBatteryInfo, getConnectivityInfo, isHeadphonesConnected} from '../native/DeviceInfo';
 import {getInstalledApps, launchApp, AppInfo, openSystemSettings} from '../native/InstalledApps';
 import {
@@ -33,16 +34,19 @@ const MAX_HISTORY = 30;
 // ─── App cache ───────────────────────────────────────────
 
 let appCache: AppInfo[] = [];
+let cacheTime = 0;
 
 async function ensureAppCache(): Promise<AppInfo[]> {
-  if (appCache.length === 0) {
+  if (appCache.length === 0 || Date.now() - cacheTime > APP_CACHE_TTL) {
     appCache = await getInstalledApps();
+    cacheTime = Date.now();
   }
   return appCache;
 }
 
 export function clearAppCache() {
   appCache = [];
+  cacheTime = 0;
 }
 
 // ─── Fuzzy app search ────────────────────────────────────
