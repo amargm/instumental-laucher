@@ -214,7 +214,7 @@
 | Rain drops | Continuous fall loop | 2-4s per cycle | ✅ Working |
 | Glitch text | Random char swap | 80ms flash | ✅ Good |
 | Parallax clock | Spring on gyro | Continuous | ✅ Good |
-| Pet idle | Opacity toggle | 1.5s interval | ⚠ Could be smoother |
+| Pet idle | Smooth sinusoidal breathing (scale 1→1.02→1) | 2s cycle | ✅ Implemented |
 | Settings gear | Rotate 90° on press, spring back | ~200ms | ✅ Implemented |
 | Quick app tap | Scale 0.88→1 spring | ~200ms | ✅ Implemented |
 | Pet long-press | Pulse scale 1→1.06 during hold | 300ms loop | ✅ Implemented |
@@ -222,6 +222,14 @@
 | Progress bars | DAY/WK labels + percentage | — | ✅ Labeled |
 | Pet hint | "hold to play" text | — | ✅ Discoverable |
 | First-launch hints | Full-screen guide overlay | — | ✅ Implemented |
+| Typing cursor | Blinking _ after time (500ms cycle) | 500ms | ✅ Implemented |
+| Rain fade-in | Gradual opacity 0→1 on mount | 800ms | ✅ Implemented |
+| Swipe preview | Content follows finger proportionally | Spring | ✅ Implemented |
+| Weather placeholder | Shows "-- °C · ---" until data loads | — | ✅ Implemented |
+| App drawer stagger | First 8 items slide-in 20ms apart | 150ms/item | ✅ Implemented |
+| Loading dots | Terminal-style "· · ·" animation | 300ms | ✅ Implemented |
+| Empty typewriter | Chars appear 30ms at a time | 30ms/char | ✅ Implemented |
+| Filter chip press | Scale 0.9 spring on press | ~80ms | ✅ Implemented |
 
 ### Where Animation Is Missing (Dead Zones)
 
@@ -323,12 +331,12 @@
 | P0 | Back-to-Home fade (replace `none`) | High — removes jarring snap | Trivial | ✅ Done |
 | P1 | Long-press visual indicator on pet | High — removes "is it working?" | Low | ✅ Done |
 | P1 | Piano dock slide-up on focus | Medium — reinforces metaphor | Low | ✅ Done |
-| P1 | Swipe gesture preview (proportional drag) | High — gesture feels connected | Medium | ⏳ |
+| P1 | Swipe gesture preview (proportional drag) | High — gesture feels connected | Medium | ✅ Done |
 | P1 | Settings transition speed fix | Medium — removes sluggishness | Trivial | ✅ Done |
-| P2 | App drawer staggered list | Medium — polish | Medium | ⏳ |
-| P2 | Rain fade-in/out | Low — subtlety | Low | ⏳ |
-| P2 | Pet smooth breathing | Low — ambient life | Low | ⏳ |
-| P2 | Typing cursor blink | Low — free aliveness | Trivial | ⏳ |
-| P3 | Loading state animations | Low — edge case | Low | ⏳ |
-| P3 | Weather placeholder flip | Low — polish | Medium | ⏳ |
+| P2 | App drawer staggered list | Medium — polish | Medium | ✅ Done |
+| P2 | Rain fade-in/out | Low — subtlety | Low | ✅ Done |
+| P2 | Pet smooth breathing | Low — ambient life | Low | ✅ Done |
+| P2 | Typing cursor blink | Low — free aliveness | Trivial | ✅ Done |
+| P3 | Loading state animations | Low — edge case | Low | ✅ Done |
+| P3 | Weather placeholder flip | Low — polish | Medium | ✅ Done |
 | P3 | Progress bar midnight reset | Low — rare event | Low | ⏳ |

@@ -128,13 +128,24 @@ const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string
   );
 });
 
-const RainEffect = memo(({accentColor}: {accentColor: string}) => (
-  <View style={styles.rainContainer} pointerEvents="none">
-    {Array.from({length: NUM_DROPS}, (_, i) => (
-      <RainDrop key={i} delay={i * 200} accentColor={accentColor} />
-    ))}
-  </View>
-));
+const RainEffect = memo(({accentColor}: {accentColor: string}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {toValue: 1, duration: 800, useNativeDriver: true}).start();
+    return () => {
+      // Fade out handled by unmount — we fade in on mount
+    };
+  }, []);
+
+  return (
+    <Animated.View style={[styles.rainContainer, {opacity: fadeAnim}]} pointerEvents="none">
+      {Array.from({length: NUM_DROPS}, (_, i) => (
+        <RainDrop key={i} delay={i * 200} accentColor={accentColor} />
+      ))}
+    </Animated.View>
+  );
+});
 
 // ─── Pixel Pet Component (8x8 grid creature) ───
 const PET_FRAMES = {
@@ -171,21 +182,27 @@ const PET_FRAMES = {
 };
 
 const PixelPet = memo(({health, accentColor}: {health: number; accentColor: string}) => {
-  const [frame, setFrame] = useState(0);
+  const breatheAnim = useRef(new Animated.Value(1)).current;
   const mood = health > 70 ? 'happy' : health > 30 ? 'neutral' : 'sad';
   const petArt = PET_FRAMES[mood];
 
-  // Subtle idle animation (toggle between frames)
+  // Smooth sinusoidal breathing (scale 1.0→1.02→1.0, 2s cycle)
   useEffect(() => {
-    const interval = setInterval(() => setFrame(f => (f + 1) % 2), 1500);
-    return () => clearInterval(interval);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breatheAnim, {toValue: 1.02, duration: 1000, useNativeDriver: true}),
+        Animated.timing(breatheAnim, {toValue: 1, duration: 1000, useNativeDriver: true}),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
 
   return (
     <View style={styles.petContainer}>
-      <Text style={[styles.petArt, {color: accentColor, opacity: frame === 0 ? 1 : 0.85}]}>
+      <Animated.Text style={[styles.petArt, {color: accentColor, transform: [{scale: breatheAnim}]}]}>
         {petArt.join('\n')}
-      </Text>
+      </Animated.Text>
       <View style={styles.petHealthBar}>
         <View style={[styles.petHealthFill, {width: `${health}%`, backgroundColor: accentColor}]} />
       </View>
@@ -286,6 +303,7 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
   const [date, setDate] = useState('');
   const [dayProgress, setDayProgress] = useState(0);
   const [weekProgress, setWeekProgress] = useState(0);
+  const [cursorVisible, setCursorVisible] = useState(true);
 
   // Parallax via gyroscope
   const sensor = useAnimatedSensor(SensorType.ROTATION, {interval: 60});
@@ -335,6 +353,12 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
     return () => clearInterval(interval);
   }, [clockFormat]);
 
+  // Typing cursor blink — 500ms on/off cycle
+  useEffect(() => {
+    const interval = setInterval(() => setCursorVisible(v => !v), 500);
+    return () => clearInterval(interval);
+  }, []);
+
   // Glitch text effect — occasional subtle character swap
   useEffect(() => {
     if (!glitchEnabled || asciiEnabled) return;
@@ -376,7 +400,7 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
         {asciiEnabled ? (
           <Text style={styles.asciiTime}>{renderAsciiTime(time)}</Text>
         ) : (
-          <Text style={styles.time}>{displayTime}</Text>
+          <Text style={styles.time}>{displayTime}<Text style={[styles.cursor, {opacity: cursorVisible ? 1 : 0}]}>_</Text></Text>
         )}
       </ReanimatedAnimated.View>
       <View style={styles.progressRow}>
@@ -629,21 +653,32 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return unsubscribe;
   }, [navigation]);
 
-  // Swipe gestures
+  // Swipe gestures with visual preview
   const navigateToRef = useRef(navigateTo);
   navigateToRef.current = navigateTo;
+  const swipeDragY = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gesture) =>
         Math.abs(gesture.dy) > 30 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderMove: (_, gesture) => {
+        // Proportional drag: content follows finger with dampening
+        const clamped = Math.max(-60, Math.min(60, gesture.dy * 0.4));
+        swipeDragY.setValue(clamped);
+      },
       onPanResponderRelease: (_, gesture) => {
+        // Spring back to rest
+        Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start();
         if (gesture.dy > 80) {
           navigateToRef.current('Notifications');
         } else if (gesture.dy < -80) {
           navigateToRef.current('AppDrawer');
         }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8}).start();
       },
     }),
   ).current;
@@ -686,7 +721,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
-      <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}]}]}>
+      <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}, {translateY: swipeDragY}]}]}>
         <View style={styles.content}>
           {/* Settings — rotate on press */}
           <TouchableOpacity
@@ -706,12 +741,12 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             <ClockWidget clockFormat={clockFormat} accentColor={accentColor} glitchEnabled={glitchEnabled} parallaxEnabled={parallaxEnabled} asciiEnabled={asciiClockEnabled} />
           </Animated.View>
 
-          {/* Weather — staggered */}
-          {weather && (
-            <Animated.View style={{opacity: weatherAnim, transform: [{translateX: weatherAnim.interpolate({inputRange: [0, 1], outputRange: [-12, 0]})}]}}>
-              <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
-            </Animated.View>
-          )}
+          {/* Weather — staggered + fade on update */}
+          <Animated.View style={{opacity: weatherAnim, transform: [{translateX: weatherAnim.interpolate({inputRange: [0, 1], outputRange: [-12, 0]})}]}}>
+            <Text style={styles.weather}>
+              {weather ? `${weather.temp} · ${weather.condition}` : '-- °C · ---'}
+            </Text>
+          </Animated.View>
 
           {/* Quote — staggered */}
           {quote.length > 0 && (
@@ -927,6 +962,12 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     lineHeight: 13,
     letterSpacing: 1,
+  },
+  cursor: {
+    fontFamily: 'monospace',
+    fontSize: 42,
+    fontWeight: '200',
+    color: Colors.textMuted,
   },
   progressWrap: {
     height: 2,

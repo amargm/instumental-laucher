@@ -27,6 +27,66 @@ import {APP_ICON_MAP} from '../components/AppIcons';
 // Module-level cache so apps persist between navigations
 let cachedApps: AppInfo[] = [];
 
+// ─── Loading dots animation (terminal-style) ───
+const LoadingDots = memo(() => {
+  const [dots, setDots] = useState('·  · ·');
+  useEffect(() => {
+    const frames = ['·  · ·', ' · ·  ', '  · · ', ' · ·  '];
+    let i = 0;
+    const interval = setInterval(() => {
+      i = (i + 1) % frames.length;
+      setDots(frames[i]);
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
+  return (
+    <View style={{paddingVertical: 40, alignItems: 'center'}}>
+      <Text style={{fontFamily: 'monospace', fontSize: 14, color: Colors.textMuted, letterSpacing: 4}}>{dots}</Text>
+    </View>
+  );
+});
+
+// ─── Filter chip with scale press feedback ───
+const FilterChip = memo(({label, active, onPress}: {label: string; active: boolean; onPress: () => void}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPressIn={() => Animated.spring(scaleAnim, {toValue: 0.9, useNativeDriver: true, friction: 8}).start()}
+      onPressOut={() => Animated.spring(scaleAnim, {toValue: 1, useNativeDriver: true, friction: 8}).start()}
+      onPress={onPress}>
+      <Animated.View style={[styles.filterChip, active && styles.filterChipActive, {transform: [{scale: scaleAnim}]}]}>
+        <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>{label}</Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
+
+// ─── Typewriter empty state ───
+const TypewriterEmpty = memo(({text}: {text: string}) => {
+  const [displayed, setDisplayed] = useState('');
+  useEffect(() => {
+    setDisplayed('');
+    let i = 0;
+    const interval = setInterval(() => {
+      i++;
+      if (i <= text.length) {
+        setDisplayed(text.slice(0, i));
+      } else {
+        clearInterval(interval);
+      }
+    }, 30);
+    return () => clearInterval(interval);
+  }, [text]);
+  return (
+    <View style={{paddingVertical: 40, alignItems: 'center'}}>
+      <Text style={{fontFamily: 'monospace', fontSize: 12, color: Colors.textMuted}}>
+        {displayed}<Text style={{opacity: 0.5}}>_</Text>
+      </Text>
+    </View>
+  );
+});
+
 interface Props {
   navigation: any;
 }
@@ -41,6 +101,10 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
   // Launch animation
   const launchScale = useRef(new Animated.Value(1)).current;
   const launchOpacity = useRef(new Animated.Value(1)).current;
+  // Staggered list entrance — animate first 8 visible items
+  const itemAnims = useRef<Animated.Value[]>(
+    Array.from({length: 8}, () => new Animated.Value(0))
+  ).current;
 
   useEffect(() => {
     loadApps();
@@ -51,6 +115,10 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
       cachedApps = [];
       loadApps();
     });
+    // Stagger entrance for first 8 items
+    Animated.stagger(20, itemAnims.map(anim =>
+      Animated.timing(anim, {toValue: 1, duration: 150, useNativeDriver: true})
+    )).start();
     return () => sub.remove();
   }, []);
 
@@ -179,9 +247,9 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     return () => sub.remove();
   }, [launchScale, launchOpacity]);
 
-  const renderApp = useCallback(({item}: {item: AppInfo}) => (
-    <AppItem item={item} onPress={handleLaunch} />
-  ), [handleLaunch]);
+  const renderApp = useCallback(({item, index}: {item: AppInfo; index: number}) => (
+    <AppItem item={item} onPress={handleLaunch} index={index} staggerAnim={index < 8 ? itemAnims[index] : undefined} />
+  ), [handleLaunch, itemAnims]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -215,35 +283,34 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
         </View>
       )}
 
-      {/* Category Filters */}
+      {/* Category Filters with press feedback */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterRow}
         contentContainerStyle={styles.filterContent}>
-        <TouchableOpacity
-          style={[styles.filterChip, !activeFilter && styles.filterChipActive]}
-          activeOpacity={0.7}
-          onPress={() => setActiveFilter(null)}>
-          <Text style={[styles.filterLabel, !activeFilter && styles.filterLabelActive]}>ALL</Text>
-        </TouchableOpacity>
+        <FilterChip
+          label="ALL"
+          active={!activeFilter}
+          onPress={() => setActiveFilter(null)}
+        />
         {APP_CATEGORIES.map(cat => (
-          <TouchableOpacity
+          <FilterChip
             key={cat.label}
-            style={[styles.filterChip, activeFilter === cat.label && styles.filterChipActive]}
-            activeOpacity={0.7}
-            onPress={() => setActiveFilter(activeFilter === cat.label ? null : cat.label)}>
-            <Text style={[styles.filterLabel, activeFilter === cat.label && styles.filterLabelActive]}>
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
+            label={cat.label}
+            active={activeFilter === cat.label}
+            onPress={() => setActiveFilter(activeFilter === cat.label ? null : cat.label)}
+          />
         ))}
       </ScrollView>
 
       {/* App count */}
       <Text style={styles.appCount}>
-        {loading ? 'Loading...' : `${filteredApps.length} ${filteredApps.length === 1 ? 'APP' : 'APPS'}${headphonesConnected ? ' · 🎧' : ''}`}
+        {loading ? '' : `${filteredApps.length} ${filteredApps.length === 1 ? 'APP' : 'APPS'}${headphonesConnected ? ' · 🎧' : ''}`}
       </Text>
+
+      {/* Loading indicator */}
+      {loading && <LoadingDots />}
 
       {/* App List */}
       <FlatList
@@ -264,11 +331,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           !loading ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                {searchQuery ? `No apps match "${searchQuery}"` : 'No apps found'}
-              </Text>
-            </View>
+            <TypewriterEmpty text={searchQuery ? `No apps match "${searchQuery}"` : 'No apps found'} />
           ) : null
         }
       />
@@ -287,7 +350,7 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
 // Icon cache to avoid re-fetching
 const iconCache: Record<string, string> = {};
 
-const AppItem = memo(({item, onPress}: {item: AppInfo; onPress: (pkg: string) => void}) => {
+const AppItem = memo(({item, onPress, index, staggerAnim}: {item: AppInfo; onPress: (pkg: string) => void; index?: number; staggerAnim?: Animated.Value}) => {
   const [icon, setIcon] = useState<string>(iconCache[item.packageName] || '');
   const CustomIcon = APP_ICON_MAP[item.packageName];
 
@@ -302,7 +365,7 @@ const AppItem = memo(({item, onPress}: {item: AppInfo; onPress: (pkg: string) =>
     }
   }, [item.packageName]);
 
-  return (
+  const content = (
     <TouchableOpacity
       style={styles.appItem}
       activeOpacity={0.7}
@@ -324,6 +387,19 @@ const AppItem = memo(({item, onPress}: {item: AppInfo; onPress: (pkg: string) =>
       </View>
     </TouchableOpacity>
   );
+
+  if (staggerAnim) {
+    return (
+      <Animated.View style={{
+        opacity: staggerAnim,
+        transform: [{translateX: staggerAnim.interpolate({inputRange: [0, 1], outputRange: [12, 0]})}],
+      }}>
+        {content}
+      </Animated.View>
+    );
+  }
+
+  return content;
 });
 
 const NavItem: React.FC<{label: string; active: boolean; onPress?: () => void}> = ({
