@@ -55,8 +55,8 @@ const DEFAULT_DOCK: {pkg: string; label: string}[] = [
 
 const DEFAULT_ACCENT = '#FFFFFF';
 
-// ─── Glitch characters for the glitch text effect ───
-const GLITCH_CHARS = '!@#$%&*░▒▓█▀▄';
+// ─── Glitch characters — terminal/instrument-style digital artifacts ───
+const GLITCH_CHARS = '0123456789▐░▒▓─│┤├';
 
 // ─── ASCII art digits (5 lines high, 4 chars wide) ───
 const ASCII_DIGITS: Record<string, string[]> = {
@@ -338,29 +338,66 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
     return () => clearInterval(interval);
   }, []);
 
-  // Glitch text effect — occasional subtle character swap
+  // Glitch text effect — multi-mode digital artifact
   useEffect(() => {
     if (!glitchEnabled || asciiEnabled) return;
     let active = true;
-    let glitchTimeout: any;
-    let revertTimeout: any;
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+
+    const addTimeout = (fn: () => void, ms: number) => {
+      timeouts.push(setTimeout(fn, ms));
+    };
+    const randomChar = () => GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+    const scramble = (str: string) =>
+      str.split('').map(c => (c === ' ' || c === ':' ? c : randomChar())).join('');
 
     const scheduleGlitch = () => {
       if (!active) return;
-      const delay = 3000 + Math.random() * 7000;
-      glitchTimeout = setTimeout(() => {
-        if (!active) return;
-        setDisplayTime(prev => {
-          if (!prev || prev.length === 0) return prev;
-          const idx = Math.floor(Math.random() * prev.length);
-          if (prev[idx] === ' ' || prev[idx] === ':') return prev;
-          const glitchChar = GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
-          return prev.substring(0, idx) + glitchChar + prev.substring(idx + 1);
-        });
-        revertTimeout = setTimeout(() => {
-          if (active) setDisplayTime(time);
-          scheduleGlitch();
-        }, 80);
+      const delay = 4000 + Math.random() * 6000;
+      addTimeout(() => {
+        if (!active || !time) return;
+        const mode = Math.random();
+
+        if (mode < 0.45) {
+          // CASCADE: full scramble → resolve left-to-right (digital scan)
+          const chars = time.split('');
+          const glitched = scramble(time).split('');
+          setDisplayTime(glitched.join(''));
+          chars.forEach((orig, i) => {
+            addTimeout(() => {
+              if (!active) return;
+              glitched[i] = orig;
+              setDisplayTime(glitched.join(''));
+              if (i === chars.length - 1) scheduleGlitch();
+            }, 60 + i * 30);
+          });
+        } else if (mode < 0.75) {
+          // FLICKER: rapid on/off 3x (CRT signal loss)
+          const glitched = scramble(time);
+          [0, 40, 80, 120, 160, 200].forEach((ms, i) => {
+            addTimeout(() => {
+              if (!active) return;
+              setDisplayTime(i % 2 === 0 ? glitched : time);
+              if (i === 5) {
+                setDisplayTime(time);
+                scheduleGlitch();
+              }
+            }, ms);
+          });
+        } else {
+          // SINGLE: one char cycles 3 alternatives before landing
+          const idx = Math.floor(Math.random() * time.length);
+          if (time[idx] === ' ' || time[idx] === ':') { scheduleGlitch(); return; }
+          [0, 50, 100].forEach((ms, i) => {
+            addTimeout(() => {
+              if (!active) return;
+              const arr = time.split('');
+              arr[idx] = i < 2 ? randomChar() : time[idx];
+              setDisplayTime(arr.join(''));
+              if (i === 2) scheduleGlitch();
+            }, ms);
+          });
+        }
       }, delay);
     };
 
@@ -368,8 +405,7 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
 
     return () => {
       active = false;
-      clearTimeout(glitchTimeout);
-      clearTimeout(revertTimeout);
+      timeouts.forEach(t => clearTimeout(t));
     };
   }, [time, glitchEnabled, asciiEnabled]);
 
