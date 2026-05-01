@@ -319,6 +319,7 @@ The glitch `useEffect` depends on `[time]`, causing recreation every second. Ref
 3. Color of the day
 4. Daily color shift
 5. Progressive onboarding hints
+6. Context-aware features (see section below)
 
 ### v2.0 — "Share it"
 1. QR config sharing
@@ -327,6 +328,412 @@ The glitch `useEffect` depends on `[time]`, causing recreation every second. Ref
 4. Screenshot mode (beautiful shareable layout)
 
 ---
+
+## 🔄 Rethinking the Swipe-Down Screen
+
+### The Problem
+
+The current "CONTROL CENTER" screen (swipe down from home) is a clone of Android's built-in notification shade + quick settings. **Every Android phone already has this** — swipe down from the status bar, anywhere, in any app. Our version is:
+- Worse (quick tiles just open system settings instead of toggling directly)
+- Slower (navigation transition vs native shade)
+- Redundant (zero unique value)
+- Wasted gesture (swipe-down is the most natural, most frequent gesture on a launcher)
+
+**Decision: Kill it.** Replace with something that doesn't exist anywhere else.
+
+### What Should Swipe-Down Be?
+
+The swipe-down gesture on a launcher home screen is the single most accessible interaction. It should open something the user wants **many times per day** that **no other app provides**.
+
+---
+
+### 💡 OPTION A: Command Terminal (RECOMMENDED — fits identity perfectly)
+
+**What:** Swipe down → a blinking cursor appears with a single-line input field. Type to do anything:
+- App name → instant launch (fuzzy match, 2-3 chars enough)
+- `t` or `time` → shows full date/time info
+- `b` or `bat` → shows battery %, charging status, temperature
+- `w` or `weather` → shows detailed weather
+- `q set [text]` → changes home quote
+- `calc 15*23` → inline calculator result
+- `timer 5m` → starts a 5-minute timer
+- `note [text]` → quick note saved to a running log
+- `focus on` / `focus off` → toggle focus mode
+- `apps [query]` → search + show matching apps
+- `dial [number]` → opens dialer with number pre-filled
+- `help` → shows available commands
+- Recent commands shown as muted history below input
+
+**Why this is THE answer:**
+- No other launcher has a command line. This IS the identity of "Instrument Launcher"
+- Replaces the redundant notification screen with something unique
+- Faster than any UI for power users — type 2 chars to launch any app
+- Infinitely extensible — new commands = new features without new screens
+- The monospace terminal aesthetic is already the design language
+- This gets posted on Reddit, X, YouTube. Viral by nature
+- Already brainstormed as "Terminal Mode" (feature #9) but making it the swipe-down primary screen elevates it from gimmick to core experience
+
+**UI vision:**
+```
+> _
+  
+  recent:
+  spotify                          2m ago
+  calc 150/3                       → 50
+  note buy milk                    1h ago
+  weather                          → 24°C · Clear
+```
+
+Background is pure `#0A0A0A`. Green or accent-colored cursor. Monospace everything. Results appear inline. No modals, no navigation. Type → result → done.
+
+**Architecture:**
+- CommandParser module: regex-based command matching
+- AppFuzzySearch: reuse existing app list, match on first 2-3 chars
+- CommandHistory: last 20 commands in AsyncStorage
+- Built-in commands ship with the app, but the system is extensible
+
+**Effort:** Medium-High (but replaces an entire screen, so net effort is similar)
+
+---
+
+### 💡 OPTION B: Daily Dashboard / Personal Instrument Panel
+
+**What:** Swipe down → a single scrollable screen showing all your personal data at a glance:
+
+```
+─── TODAY ────────────────────
+  THU MAY 1, 2026
+  ☀ 06:12 ──────────── ☾ 18:47
+  
+─── VITALS ───────────────────
+  ▮▮▮▮▮▮▮▯▯▯  67%  ⚡ charging
+  ◦ Home_WiFi_5G  ·  LTE ✓
+  🎧 AirPods Pro connected
+  
+─── USAGE ────────────────────
+  ↑ 14 pickups  ·  2h 07m screen
+  ▁▂▃▅▇▅▃▂▁▁▁▁▁▂▅▇█▅▃▂▁▁▁
+  FOCUS: 73/100
+  
+─── INTENTION ────────────────
+  "finish the launcher v1.3"
+  
+─── LOG ──────────────────────
+  09:12  opened Slack (3rd time)
+  09:08  note: buy milk
+  08:45  focus blocked Instagram
+  08:30  morning routine started
+```
+
+**Why:**
+- Turns the launcher into a personal flight recorder
+- Every piece of data is contextual and live — you're not reading old info
+- The "instrument panel" name finally makes complete literal sense
+- Nobody has this. Digital Wellbeing is buried. This is your data, front and center, one gesture away
+- Pairs perfectly with screen time tracking, pickup counter, focus mode, and all the context-aware features
+
+**Effort:** High (needs screen time, pickup tracking, note system, connectivity display). But this is where all the context features come together.
+
+---
+
+### 💡 OPTION C: Quick Capture / Scratchpad
+
+**What:** Swipe down → instant text input that saves to a running log. Like a micro-journal.
+
+```
+> buy groceries after work_
+
+───────────────────────
+  today
+  11:30  look into that API bug
+  09:15  call mom at 3pm
+  08:00  morning: feel good, slept well
+
+  yesterday  
+  22:10  great day, shipped v1.2
+  14:30  meeting notes: Q3 roadmap...
+```
+
+**Why:**
+- The fastest "write something down" UX possible on a phone. Swipe + type + done
+- No app to open, no note app to find, no title to give
+- Running log format = personal micro-journal
+- Timestamped automatically
+- Searchable (type `/search [query]` to filter)
+- Exportable (long-press to share as text)
+- Pairs with morning intention: the first entry each day is your intention
+
+**Effort:** Low-Medium. TextInput + AsyncStorage log. Simple but powerful.
+
+---
+
+### 💡 OPTION D: Context Mode Switcher
+
+**What:** Swipe down → shows detected current context + lets you manually override:
+
+```
+─── CURRENT MODE ─────────────
+  ◉ HOME  ·  detected via WiFi
+  
+  ▸ HOME        ☀ ◠ connected
+  ▹ WORK        switch dock + focus
+  ▹ COMMUTE     music + maps dock
+  ▹ SLEEP       dim + alarm only
+  ▹ FOCUS       block all + timer
+  
+─── ACTIVE ───────────────────
+  ☔ Rain effect ON (weather)
+  🎧 Music mode OFF (no headphones)
+  ⚡ Charging: full in ~45m
+```
+
+**Why:**
+- Manual override for the automatic context system
+- Shows you what the launcher "thinks" — transparent AI
+- Quick way to enter focus/sleep/work mode
+- Shows all active context features and their current state
+
+**Effort:** Medium. Needs the context system built first.
+
+---
+
+### 💡 OPTION E: Hybrid — Terminal + Dashboard
+
+**What:** The best of A and B. Swipe down opens a terminal-style screen where the default view (before typing) shows live dashboard data. Once you start typing, dashboard fades and command mode takes over.
+
+```
+> _
+
+  ▮▮▮▮▮▮▮▯▯▯ 67% ⚡  ·  ☀ 06:12-18:47
+  ↑ 14 pickups  ·  2h 07m  ·  FOCUS 73
+  ◦ Home_WiFi  ·  🎧 AirPods
+  
+  recent:
+  spotify                          2m ago
+  note buy milk                    1h ago
+```
+
+When you type: dashboard lines fade out, full screen becomes command input + results.
+
+**Why:**
+- Dashboard gives value even if you never type a command
+- Terminal gives power when you need it
+- One screen, two purposes, zero wasted space
+- Default state = glanceable data. Active state = command line
+- This is the ultimate "instrument panel" — gauges + command input
+
+**Effort:** Medium-High. But it's the most complete vision.
+
+---
+
+### 🏆 RECOMMENDATION
+
+**Option E (Hybrid Terminal + Dashboard)** is the north star. But ship it incrementally:
+
+1. **v1.3:** Ship Option A (Terminal) as the swipe-down screen. App search + basic commands (`weather`, `battery`, `timer`, `note`, `calc`). This alone is a viral feature.
+2. **v1.4:** Add dashboard data above the cursor (battery, connectivity, pickups, focus score). The terminal becomes the hybrid.
+3. **v1.5:** Add `note` command history as a persistent log. Add context mode display.
+
+This replaces the notification screen entirely. Users who want notifications swipe down from the Android status bar — the way God intended.
+
+### What Happens to Existing Notification Code
+
+| Component | Action |
+|-----------|--------|
+| `NotificationScreen.tsx` | **Delete entirely** → replace with `TerminalScreen.tsx` |
+| `NotificationService.kt` | **Keep** — notification count can power dock badge dots |
+| `getNotifications()` / `dismissNotification()` | **Keep** — could be terminal commands: `notif` lists, `dismiss all` clears |
+| Quick settings tile functions | **Keep** — become terminal commands: `wifi`, `bt`, `dnd`, `display` |
+| Swipe-down gesture in HomeScreen | **Keep** — just change navigation target from `'Notifications'` to `'Terminal'` |
+| `DeviceInfoEvents` listeners | **Move** — notification count badge on home screen dock instead |
+
+---
+
+## 🧠 Context-Aware Features — Deep Dive
+
+> The core idea: your launcher should **know** what's happening and surface the right thing at the right time. Not by asking — by sensing.
+
+### Current Context Signals (audit)
+
+| Signal | Status | What It Does Now |
+|--------|--------|-----------------|
+| 🎧 Headphones | **Active** | Sorts music apps to top of drawer |
+| 🌧️ Weather condition | **Active** | Triggers rain particle effect |
+| 📐 Gyroscope | **Active** | Parallax tilt on clock |
+| 📱 Screen frequency | **Active** | Pet health ↑ if >30min gap, ↓ if <5min |
+| 🔌 Boot | **Active** | Auto-launches as home screen |
+| 🔋 Battery | **Display only** | Shown in Settings, no behavior |
+| 📶 Connectivity | **Dead code** | Native API exists, never called |
+| 🔔 Notification count | **Dead code** | `getNotificationCount()` exported, unused |
+
+---
+
+### 🎧 HEADPHONE CONTEXT — Expand What We Have
+
+**Current:** Music apps sort to top when headphones detected.
+**Problem:** One-time check on mount. Doesn't react to live plug/unplug.
+
+**Improvements:**
+1. **Live headphone listener** — Use `AudioManager.registerAudioDeviceCallback()` in Kotlin to emit events on connect/disconnect. React-side listens via `DeviceInfoEvents`.
+2. **Headphone mode on home screen** — When headphones connect, show a subtle `🎧` indicator next to weather. Below the Quick-access row , a new button fades in slowly with cool animation (like the filter in the app list) which when clicked shows the list of music apps in the home screen itself) music apps (Spotify, YT Music, podcast app, phone/contacts) and one more tap on the same button . When unplugged, button filters fades out
+3. **Bluetooth device name** — Show `🎧 AirPods Pro` or `🎧 WH-1000XM5` instead of generic icon. The AudioDevice API gives device names.
+4. **Audio route quick-switch** — If multiple audio outputs detected (speaker + BT), show a tiny toggle.
+
+**Effort:** Medium (native callback + event bridge + conditional UI)
+
+---
+
+### 🔋 BATTERY CONTEXT — Make It Useful
+
+**Current:** Displayed in Settings. Does nothing.
+
+**New behaviors:**
+1. **Low battery dock swap** — When battery <15%, dock auto-surfaces essential apps (Phone, Maps, Messages) regardless of user config. Reverts when charging. Rationale: when battery is dying, you want survival tools, not Instagram.
+2. **Battery in the instrument panel** — Show `▮▮▮▮▯ 67%` as a thin bar on home screen (like the day/week progress bars). When charging, animate with a pulse. This is pure instrument-panel data.
+3. **Charging mode** — When plugged in, accent color subtly shifts to green. Or show a small `⚡` next to battery. The home screen should acknowledge "you're charging" without being asked.
+4. **Power-saver suggestions** — At <20%, if rain effect or parallax is on, show a one-time suggestion: `"low battery — disable effects?"` with a single tap to turn off all animated features.
+
+**Effort:** Low — battery data already flows to JS. Just conditional logic + UI.
+
+---
+
+### 📶 CONNECTIVITY CONTEXT — Unlock Dead Code
+
+**Current:** `getConnectivityInfo()` returns `{isConnected, isWifi, isCellular, wifiName}` — fully implemented, never used.
+
+**New behaviors:**
+1. **Wi-Fi SSID as location proxy** — This is the big one. No GPS needed. If connected to `"Home_WiFi_5G"` → user is home. If `"Office-Corp"` → user is at work. If cellular only → in transit. User maps SSIDs to locations in Settings (one-time setup: "Name this network: HOME / WORK / OTHER").
+2. **Location-based dock** — HOME dock: entertainment apps. WORK dock: Slack, Calendar, Drive. TRANSIT dock: Maps, Music, Transit. The dock **automatically swaps** based on Wi-Fi. This is the #1 most useful context feature a launcher can have.
+3. **No-internet indicator** — When `isConnected` is false, show `✕ offline` below weather (instead of stale cached weather). Subtle but honest.
+4. **Wi-Fi name on home** — Tiny muted text: `◦ Home_5G` or `◦ LTE`. Instrument panels show connection status.
+
+**Effort:** Medium — the native bridge exists. Need SSID→location mapping UI + dock swap logic.
+
+---
+
+### ⏰ TIME-OF-DAY CONTEXT — The Missing Layer
+
+**Current:** Clock + progress bars. No behavior changes with time.
+
+**New behaviors:**
+1. **Time-of-day greeting** — Replace static quote with contextual one-liner at certain hours:
+   - 5-8 AM: `"good morning"` (or user's morning intention if set)
+   - 12-1 PM: `"midday · 47% through"`
+   - 10 PM+: `"wind down · tomorrow starts in {h}h"`
+   - This replaces quote only if user hasn't set a custom one.
+2. **Night mode accent** — After sunset (from sunrise/sunset calculation or 9 PM fallback), accent color auto-dims to a muted version. Text dims slightly. Reduces visual stimulation at night. No system-level night mode needed — this is launcher-only.
+3. **App suggestions by time** — Morning (6-9): news, weather, calendar. Lunch (12-1): food delivery, messages. Evening (6-9): streaming, social. Night (10+): alarm, meditation. Show as a subtle `"suggested: Alarm"` text near quick apps.
+4. **Weekend vs weekday** — Different quick-app row on weekends vs weekdays. User configures once: "weekend apps" vs "weekday apps". Automatic swap at midnight Fri→Sat and Sun→Mon.
+5. **Sleep timer** — After 11 PM, if user opens the phone, show a brief `"it's late — need this?"` overlay (3 seconds, dismissable). Not blocking, just a gentle nudge. Pairs with focus mode.
+
+**Effort:** Low to Medium — pure JS logic, no native changes.
+
+---
+
+### 🔔 NOTIFICATION CONTEXT — Surface Without Noise
+
+**Current:** Full notification screen exists. No notification awareness on home screen.
+
+**New behaviors:**
+1. **Notification count badge** — Tiny number or dot on the dock's `···` button: `···²` if 2 unread notifications. Or a pulsing accent dot. Tells you "something's waiting" without pulling you in.
+2. **Per-app dock badges** — If a dock app (e.g. Messages) has notifications, show a 4px accent dot above its label. Just a dot, not a count. Minimal but informative.
+3. **Notification urgency** — If notification count > 10 and growing, subtly change the border color of the home screen or pulse the notification indicator. "Your phone is noisy right now."
+4. **Quiet home** — If zero notifications, show `✓ clear` in muted text somewhere. Positive reinforcement for a quiet phone.
+5. **Notification source on home** — Show the latest notification as a single line below weather: `"3m ago · John: Hey are you free?"`. Tap to open notification screen. One line max, truncated. Like a ticker.
+
+**Effort:** Low — `getNotificationCount()` already exists. Need to call it on focus + wire to UI.
+
+---
+
+### 🔌 CHARGING CONTEXT
+
+**Current:** Battery shows "Charging" in Settings.
+
+**New behaviors:**
+1. **Charging ambient mode** — When plugged in + screen on, home screen becomes a minimal desk clock: large time, battery %, very dim. No quick apps or dock. Perfect for nightstand. Detect charging via `BatteryManager.isCharging` (already available).
+2. **Charge estimate** — Show `"⚡ full in ~1h 20m"` based on charge rate (sample battery % over time). Instrument panels show ETAs.
+3. **Charging history** — Track how often and how long user charges. Show in weekly stats. "You charged 2x today."
+
+**Effort:** Low for ambient mode (conditional rendering). Medium for charge estimate (rate tracking).
+
+---
+
+### 🌍 ENVIRONMENTAL CONTEXT — No Extra Permissions
+
+**Current:** Weather from wttr.in.
+
+**New behaviors (no GPS/location permission needed):**
+1. **Sunrise/sunset** — Calculate from timezone offset + date (approximate latitude). Show `☀ 06:12 · ☾ 18:47`. Already in brainstorm, still a great idea.
+2. **UV index / air quality** — wttr.in supports `%u` (UV index). Add to weather display when high: `"28°C · Sunny · UV 8 ⚠"`. Genuinely useful health data.
+3. **Moon phase** — Calculable from date alone. Show as a single character: `◐`, `●`, `◑`, `○`. Subtle, beautiful, data-rich.
+4. **Season-aware theme** — Slightly shift the default color palette by season. Winter: cooler tones. Summer: warmer. Autumn: muted amber. Just shifts the accent color preset defaults.
+5. **Daylight remaining** — `"4h 22m of light left"`. Useful for outdoor planning. Pairs with sunset calculation.
+
+**Effort:** Low — pure math + one extra API parameter.
+
+---
+
+### 🏃 BEHAVIORAL CONTEXT — Learn From Usage
+
+**Current:** Pet health tracks screen frequency. No other behavioral awareness.
+
+**New behaviors:**
+1. **App launch frequency tracking** — Count launches per app per day. After 1 week, the launcher **knows your routine**:
+   - "You always open Slack at 9 AM" → surface it automatically
+   - "You open Instagram 47 times/day" → candidate for focus mode auto-suggestion
+   - "You never open this dock app" → suggest replacing it
+2. **Routine detection** — If user opens the same 3 apps in the same order every morning (e.g., Clock → Gmail → Slack), offer a "Morning routine" one-tap that launches all three sequentially.
+3. **App divorce** — If an app hasn't been opened in 30 days, dim it in the drawer. After 60 days, suggest uninstall. "You haven't opened TikTok in 43 days. Remove?"
+4. **Daily rhythm visualization** — Tiny sparkline on home screen showing phone usage intensity over the last 24h. Like a heartbeat monitor. Pure instrument-panel data. `▁▂▃▅▇▅▃▂▁▁▁▁▁▂▅▇█▅▃▂▁▁▁`
+5. **Focus score** — Combine pickup count + screen time + focus-mode cancels into a single 0-100 score. Show on home: `"FOCUS: 73"`. Gamifies intentional phone use. Updates hourly.
+
+**Effort:** Medium — needs persistent counters + analysis logic.
+
+---
+
+### 🎯 COMBINED CONTEXT — The Multiplier
+
+The real power is **combining** signals:
+
+| Combo | Behavior |
+|-------|----------|
+| 🎧 Headphones + 🚶 Cellular (no WiFi) | → Commuting. Surface transit + podcast apps. Show "commute mode" |
+| 🔋 Low battery + 📶 No WiFi | → Survival mode. Disable all effects, essential dock only |
+| ⏰ Night + 🔌 Charging | → Nightstand clock mode. Dim everything, show only time + alarm |
+| ⏰ Morning + 📶 Home WiFi | → Morning routine. Show intention prompt, surface morning apps |
+| ⏰ Work hours + 📶 Work WiFi | → Focus dock. Suppress social apps from suggestions |
+| 🔔 Many notifications + ⏰ Late night | → "You have 12 notifications. Deal with them tomorrow?" |
+| 🎧 Unplugged + ⏰ Night | → Auto-lower suggestion: "Set alarm?" |
+| 🔋 Charging + ⏰ Work WiFi | → At desk. Surface desktop-companion apps (Slack, Calendar) |
+
+This table is the north star. Each row is a **mode** the launcher enters automatically.
+
+---
+
+### 📊 Context Feature Priority
+
+| # | Feature | Signals Used | Impact | Effort | Priority |
+|---|---------|-------------|--------|--------|----------|
+| C1 | Battery bar on home | Battery | High | Trivial | **P0** |
+| C2 | Notification badge dots on dock | Notifications | High | Low | **P0** |
+| C3 | Live headphone listener | Audio | Medium | Low | **P1** |
+| C4 | Low-battery essential dock | Battery | High | Low | **P1** |
+| C5 | Time-of-day greeting | Time | Medium | Low | **P1** |
+| C6 | No-internet indicator | Connectivity | Medium | Trivial | **P1** |
+| C7 | Charging ambient/nightstand mode | Charging + Time | High | Medium | **P1** |
+| C8 | Wi-Fi SSID location-based dock | WiFi | **Huge** | Medium | **P1** |
+| C9 | Notification ticker on home | Notifications | Medium | Low | **P2** |
+| C10 | Night accent dimming | Time + Sunset | Medium | Low | **P2** |
+| C11 | App launch frequency tracking | Behavior | High | Medium | **P2** |
+| C12 | Moon phase display | Date | Low | Trivial | **P2** |
+| C13 | UV/air quality in weather | Weather API | Medium | Trivial | **P2** |
+| C14 | Weekend/weekday app swap | Time + Day | Medium | Low | **P2** |
+| C15 | Routine detection | Behavior + Time | High | High | **P3** |
+| C16 | Focus score | Behavior | Medium | Medium | **P3** |
+| C17 | Daily rhythm sparkline | Behavior | Medium | Medium | **P3** |
+| C18 | App divorce suggestions | Behavior | Low | Low | **P3** |
+| C19 | Combined context modes | All | **Huge** | High | **P3** |
+| C20 | Charging time estimate | Battery | Low | Medium | **P3** |
 
 ## 💡 Revised Positioning
 

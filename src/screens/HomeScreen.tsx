@@ -565,7 +565,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         Animated.spring(swipeDragY, {toValue: 0, useNativeDriver: true, friction: 8, tension: 80}).start();
         if (gesture.dy > 80) {
           heavy();
-          navigateToRef.current('Notifications');
+          navigateToRef.current('Terminal');
         } else if (gesture.dy < -80) {
           heavy();
           navigateToRef.current('AppDrawer');
@@ -755,7 +755,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
               <Text style={styles.hintsDivider}>────────────────────</Text>
 
               <Text style={styles.hintsSection}>GESTURES</Text>
-              <Text style={styles.hintsItem}>↓  swipe down → notifications</Text>
+              <Text style={styles.hintsItem}>↓  swipe down → terminal</Text>
               <Text style={styles.hintsItem}>↑  swipe up   → app drawer</Text>
 
               <Text style={styles.hintsSection}>HOME SCREEN</Text>

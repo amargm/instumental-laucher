@@ -8,7 +8,7 @@ import {StyleSheet} from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import AppDrawerScreen from './src/screens/AppDrawerScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
-import NotificationScreen from './src/screens/NotificationScreen';
+import TerminalScreen from './src/screens/TerminalScreen';
 import {Colors} from './src/theme/tokens';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
@@ -16,7 +16,7 @@ export type RootStackParamList = {
   Home: undefined;
   AppDrawer: undefined;
   Settings: undefined;
-  Notifications: undefined;
+  Terminal: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -31,8 +31,8 @@ const AppDrawerWithBoundary = (props: any) => (
 const SettingsWithBoundary = (props: any) => (
   <ErrorBoundary><SettingsScreen {...props} /></ErrorBoundary>
 );
-const NotificationsWithBoundary = (props: any) => (
-  <ErrorBoundary><NotificationScreen {...props} /></ErrorBoundary>
+const TerminalWithBoundary = (props: any) => (
+  <ErrorBoundary><TerminalScreen {...props} /></ErrorBoundary>
 );
 
 const App = () => {
@@ -76,8 +76,8 @@ const App = () => {
               options={{animation: 'slide_from_right', animationDuration: 150}}
             />
             <Stack.Screen
-              name="Notifications"
-              component={NotificationsWithBoundary}
+              name="Terminal"
+              component={TerminalWithBoundary}
               options={{animation: 'slide_from_bottom', animationDuration: 100}}
             />
           </Stack.Navigator>
