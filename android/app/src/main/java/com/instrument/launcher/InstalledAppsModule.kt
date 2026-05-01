@@ -172,13 +172,6 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    @ReactMethod
-    fun expandNotificationPanel(promise: Promise) {
-        // Removed: reflection-based StatusBarManager hack violates Play Store policy.
-        // Use DeviceInfo.openNotificationListenerSettings() instead.
-        promise.reject("DEPRECATED", "Use DeviceInfo module for notification access")
-    }
-
     private fun drawableToBitmap(drawable: Drawable): Bitmap {
         if (drawable is BitmapDrawable) {
             return drawable.bitmap

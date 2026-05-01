@@ -17,11 +17,6 @@ export const Colors = {
   success: '#30D158',
 };
 
-export const Typography = {
-  fontPrimary: undefined, // System default (Segoe UI / SF Pro)
-  fontMono: 'monospace',
-};
-
 export const Spacing = {
   xs: 4,
   sm: 8,

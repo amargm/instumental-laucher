@@ -21,17 +21,6 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
     override fun getName(): String = "InstrumentDeviceInfo"
 
     @ReactMethod
-    fun getBatteryLevel(promise: Promise) {
-        try {
-            val bm = reactApplicationContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-            val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            promise.resolve(level)
-        } catch (e: Exception) {
-            promise.reject("ERROR", e.message)
-        }
-    }
-
-    @ReactMethod
     fun getBatteryInfo(promise: Promise) {
         try {
             val bm = reactApplicationContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
@@ -180,18 +169,6 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
     fun openDisplaySettings(promise: Promise) {
         try {
             val intent = Intent(Settings.ACTION_DISPLAY_SETTINGS)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            reactApplicationContext.startActivity(intent)
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("ERROR", e.message)
-        }
-    }
-
-    @ReactMethod
-    fun openSoundSettings(promise: Promise) {
-        try {
-            val intent = Intent(Settings.ACTION_SOUND_SETTINGS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             reactApplicationContext.startActivity(intent)
             promise.resolve(true)

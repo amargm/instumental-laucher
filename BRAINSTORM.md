@@ -273,7 +273,7 @@ These were removed in v1.2 sprint and no longer exist in the codebase:
 - Without it: SSID returns `<unknown ssid>` on most devices → already partially handled in UI but the permission is never requested
 - **Files**: `AndroidManifest.xml` — add `<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>`
 - **Files**: `DeviceInfoModule.kt` — add runtime permission check before SSID access
-- **Status**: ❌ Not started
+- **Status**: ✅ Done
 
 **C2. No release signing config**
 - `android/app/build.gradle` line 29-34: `release {}` block has no `signingConfig`
@@ -287,7 +287,7 @@ These were removed in v1.2 sprint and no longer exist in the codebase:
 - Devices on Android 7.1 and below (API < 26) = no icon visible, blank/crash
 - `minSdkVersion` is 23 (Android 6.0) so this affects real users
 - Need: generate PNG icons for all densities OR raise `minSdkVersion` to 26
-- **Status**: ❌ Not started
+- **Status**: ✅ Done
 
 **C4. versionCode/versionName strategy**
 - `build.gradle`: `versionCode 1`, `versionName "1.0"` hardcoded
@@ -413,9 +413,9 @@ These were removed in v1.2 sprint and no longer exist in the codebase:
 
 ```
 PERMISSIONS & MANIFEST
-[ ] Add ACCESS_COARSE_LOCATION to AndroidManifest.xml (C1)
-[ ] Add runtime permission request for location (H7)
-[ ] Verify all permissions are declared for used features ✅ Done (rest is OK)
+[x] Add ACCESS_COARSE_LOCATION to AndroidManifest.xml (C1) ✅ Done
+[x] Add runtime permission request for location (H7) ✅ Done
+[x] Verify all permissions are declared for used features ✅ Done (rest is OK)
 
 BUILD & SIGNING
 [ ] Generate release keystore (C2)
@@ -424,21 +424,21 @@ BUILD & SIGNING
 [ ] Test release build with Proguard ✅ Rules look correct
 
 ICONS & RESOURCES
-[ ] Generate PNG launcher icons for all densities (C3)
-[ ] Verify adaptive icon renders correctly on API 26+ ✅ Done
-[ ] Splash screen colors match app theme ✅ Done
+[x] Generate PNG launcher icons for all densities (C3) ✅ Done
+[x] Verify adaptive icon renders correctly on API 26+ ✅ Done
+[x] Splash screen colors match app theme ✅ Done
 
 DEAD CODE CLEANUP
-[ ] Delete NotificationScreen.tsx (H1)
-[ ] Remove expandNotificationPanel from InstalledApps module (H2)
-[ ] Remove getBatteryLevel from DeviceInfo module (H3)
-[ ] Remove openSoundSettings from DeviceInfo module (H4)
-[ ] Remove unused Typography export (H5)
+[x] Delete NotificationScreen.tsx (H1) ✅ Done
+[x] Remove expandNotificationPanel from InstalledApps module (H2) ✅ Done
+[x] Remove getBatteryLevel from DeviceInfo module (H3) ✅ Done
+[x] Remove openSoundSettings from DeviceInfo module (H4) ✅ Done
+[x] Remove unused Typography export (H5) ✅ Done
 
 CODE QUALITY
 [ ] Extract MUSIC_KEYWORDS to constants.ts (M1)
 [ ] Extract magic numbers to constants.ts (M2)
-[ ] Add try-catch to BootReceiver (H6)
+[x] Add try-catch to BootReceiver (H6) ✅ Done
 [ ] Replace console.warn with silent handling (M4)
 [ ] Test weather failure UX (H8)
 

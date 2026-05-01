@@ -15,6 +15,7 @@ import {
   UIManager,
   Platform,
   AppState,
+  PermissionsAndroid,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -454,6 +455,22 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       } catch (e) {}
     };
     loadSettings();
+  }, []);
+
+  // Request location permission for WiFi SSID (Android 8.1+)
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION).then(granted => {
+        if (!granted) {
+          PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION, {
+            title: 'Location Permission',
+            message: 'Instrument needs approximate location to display your WiFi network name.',
+            buttonPositive: 'Allow',
+            buttonNegative: 'Deny',
+          });
+        }
+      });
+    }
   }, []);
 
   // Reload settings on focus

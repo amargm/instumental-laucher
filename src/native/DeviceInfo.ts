@@ -29,10 +29,6 @@ export interface NotificationItem {
 
 // ─── Device Info ─────────────────────────────────────────
 
-export async function getBatteryLevel(): Promise<number> {
-  return DeviceInfo.getBatteryLevel();
-}
-
 export async function getBatteryInfo(): Promise<BatteryInfo> {
   return DeviceInfo.getBatteryInfo();
 }
@@ -87,10 +83,6 @@ export async function openNfcSettings(): Promise<boolean> {
 
 export async function openDisplaySettings(): Promise<boolean> {
   return DeviceInfo.openDisplaySettings();
-}
-
-export async function openSoundSettings(): Promise<boolean> {
-  return DeviceInfo.openSoundSettings();
 }
 
 export async function openDoNotDisturbSettings(): Promise<boolean> {
