@@ -45,7 +45,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [showAppPicker, setShowAppPicker] = useState(false);
   const [showDockPicker, setShowDockPicker] = useState(false);
   const [allApps, setAllApps] = useState<AppInfo[]>([]);
-  const [settingsReady, setSettingsReady] = useState(false);
 
   // Load persisted settings — single multiGet to avoid sequential renders
   useEffect(() => {
@@ -87,7 +86,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         const pet = map.get(STORAGE_KEYS.petEnabled);
         if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
       } catch (e) {}
-      setSettingsReady(true);
     };
     loadSettings();
   }, []);
@@ -309,16 +307,6 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             index,
           })}
         />
-      </SafeAreaView>
-    );
-  }
-
-  if (!settingsReady) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>CONFIGURATION</Text>
-        </View>
       </SafeAreaView>
     );
   }

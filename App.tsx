@@ -126,7 +126,7 @@ const App = () => {
             <Stack.Screen
               name="Settings"
               component={SettingsWithBoundary}
-              options={{animation: 'slide_from_right', animationDuration: 150}}
+              options={{animation: 'fade_from_bottom', animationDuration: 150}}
             />
             <Stack.Screen
               name="Terminal"
