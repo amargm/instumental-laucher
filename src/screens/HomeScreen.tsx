@@ -147,50 +147,28 @@ const RainEffect = memo(({accentColor}: {accentColor: string}) => {
   );
 });
 
-// ─── Pixel Pet Component (8x8 grid creature) ───
-const PET_FRAMES = {
-  happy: [
-    '  ████  ',
-    ' █░░░░█ ',
-    '█░●░░●░█',
-    '█░░░░░░█',
-    '█░░▀▀░░█',
-    ' █░░░░█ ',
-    '  ████  ',
-    '  █  █  ',
-  ],
-  neutral: [
-    '  ████  ',
-    ' █░░░░█ ',
-    '█░●░░●░█',
-    '█░░░░░░█',
-    '█░░──░░█',
-    ' █░░░░█ ',
-    '  ████  ',
-    '  █  █  ',
-  ],
-  sad: [
-    '  ████  ',
-    ' █░░░░█ ',
-    '█░●░░●░█',
-    '█░░░░░░█',
-    '█░░▄▄░░█',
-    ' █░░░░█ ',
-    '  ████  ',
-    '  █  █  ',
-  ],
+// ─── Pixel Pet — minimal cute creature ───
+const PET_FACES = {
+  happy:   '(• ᴗ •)',
+  neutral: '(• _ •)',
+  sad:     '(• ︵ •)',
+};
+
+const PET_BODIES = {
+  happy:   ' /|  |\\',
+  neutral: ' /|  |\\',
+  sad:     ' /|  |\\',
 };
 
 const PixelPet = memo(({health, accentColor}: {health: number; accentColor: string}) => {
   const breatheAnim = useRef(new Animated.Value(1)).current;
   const mood = health > 70 ? 'happy' : health > 30 ? 'neutral' : 'sad';
-  const petArt = PET_FRAMES[mood];
 
-  // Smooth sinusoidal breathing (scale 1.0→1.02→1.0, 2s cycle)
+  // Smooth sinusoidal breathing (scale 1.0→1.03→1.0, 2s cycle)
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(breatheAnim, {toValue: 1.02, duration: 1000, useNativeDriver: true}),
+        Animated.timing(breatheAnim, {toValue: 1.03, duration: 1000, useNativeDriver: true}),
         Animated.timing(breatheAnim, {toValue: 1, duration: 1000, useNativeDriver: true}),
       ])
     );
@@ -200,9 +178,10 @@ const PixelPet = memo(({health, accentColor}: {health: number; accentColor: stri
 
   return (
     <View style={styles.petContainer}>
-      <Animated.Text style={[styles.petArt, {color: accentColor, transform: [{scale: breatheAnim}]}]}>
-        {petArt.join('\n')}
-      </Animated.Text>
+      <Animated.View style={{alignItems: 'center', transform: [{scale: breatheAnim}]}}>
+        <Text style={[styles.petFace, {color: accentColor}]}>{PET_FACES[mood]}</Text>
+        <Text style={[styles.petBody, {color: accentColor}]}>{PET_BODIES[mood]}</Text>
+      </Animated.View>
       <View style={styles.petHealthBar}>
         <View style={[styles.petHealthFill, {width: `${health}%`, backgroundColor: accentColor}]} />
       </View>
@@ -1149,11 +1128,18 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     alignItems: 'center',
   },
-  petArt: {
+  petFace: {
     fontFamily: 'monospace',
-    fontSize: 8,
-    lineHeight: 10,
-    letterSpacing: 0,
+    fontSize: 16,
+    letterSpacing: 1,
+    lineHeight: 20,
+  },
+  petBody: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    letterSpacing: 1,
+    lineHeight: 14,
+    opacity: 0.6,
   },
   petHealthBar: {
     width: 60,
