@@ -23,7 +23,6 @@ import ReanimatedAnimated, {
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
 import {
-  GridIcon,
   SettingsIcon,
 } from '../components/AppIcons';
 import {APP_ICON_MAP} from '../components/AppIcons';
@@ -42,6 +41,8 @@ const STORAGE_KEYS = {
   petHealth: '@pet_health',
   petLastFed: '@pet_last_fed',
   reactionBest: '@reaction_best_time',
+  rainEnabled: '@settings_rain_enabled',
+  petEnabled: '@settings_pet_enabled',
 };
 
 const DEFAULT_DOCK: {pkg: string; label: string}[] = [
@@ -92,9 +93,11 @@ const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string
   const fallAnim = useRef(new Animated.Value(-20)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const x = useRef(Math.random() * SCREEN_WIDTH).current;
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     const startDrop = () => {
+      if (!mountedRef.current) return;
       fallAnim.setValue(-20);
       opacity.setValue(0.3 + Math.random() * 0.4);
       Animated.timing(fallAnim, {
@@ -104,7 +107,11 @@ const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string
       }).start(() => startDrop());
     };
     const timeout = setTimeout(startDrop, delay);
-    return () => clearTimeout(timeout);
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(timeout);
+      fallAnim.stopAnimation();
+    };
   }, []);
 
   const char = RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)];
@@ -114,8 +121,7 @@ const RainDrop = memo(({delay, accentColor}: {delay: number; accentColor: string
       style={[
         styles.rainDrop,
         {left: x, opacity, transform: [{translateY: fallAnim}], color: accentColor},
-      ]}
-      pointerEvents="none">
+      ]}>
       {char}
     </Animated.Text>
   );
@@ -279,10 +285,9 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
   const [dayProgress, setDayProgress] = useState(0);
   const [weekProgress, setWeekProgress] = useState(0);
 
-  // Parallax via gyroscope (only initialize sensor if enabled)
+  // Parallax via gyroscope
   const sensor = useAnimatedSensor(SensorType.ROTATION, {interval: 60});
   const parallaxStyle = useAnimatedStyle(() => {
-    if (!parallaxEnabled) return {};
     const {pitch, roll} = sensor.sensor.value;
     return {
       transform: [
@@ -331,32 +336,35 @@ const ClockWidget = memo(({clockFormat, accentColor, glitchEnabled, parallaxEnab
   // Glitch text effect — occasional subtle character swap
   useEffect(() => {
     if (!glitchEnabled || asciiEnabled) return;
+    let active = true;
+    let glitchTimeout: any;
+    let revertTimeout: any;
+
     const scheduleGlitch = () => {
-      const delay = 3000 + Math.random() * 7000; // 3-10 seconds
-      return setTimeout(() => {
+      if (!active) return;
+      const delay = 3000 + Math.random() * 7000;
+      glitchTimeout = setTimeout(() => {
+        if (!active) return;
         setDisplayTime(prev => {
           if (!prev || prev.length === 0) return prev;
           const idx = Math.floor(Math.random() * prev.length);
-          // Don't glitch spaces or colons
           if (prev[idx] === ' ' || prev[idx] === ':') return prev;
           const glitchChar = GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
           return prev.substring(0, idx) + glitchChar + prev.substring(idx + 1);
         });
-        // Revert after 80ms
-        setTimeout(() => {
-          setDisplayTime(time);
+        revertTimeout = setTimeout(() => {
+          if (active) setDisplayTime(time);
+          scheduleGlitch();
         }, 80);
       }, delay);
     };
 
-    const timeoutId = scheduleGlitch();
-    const intervalId = setInterval(() => {
-      scheduleGlitch();
-    }, 5000);
+    scheduleGlitch();
 
     return () => {
-      clearTimeout(timeoutId);
-      clearInterval(intervalId);
+      active = false;
+      clearTimeout(glitchTimeout);
+      clearTimeout(revertTimeout);
     };
   }, [time, glitchEnabled, asciiEnabled]);
 
@@ -396,13 +404,20 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [installedApps, setInstalledApps] = useState<AppInfo[]>([]);
   const [weather, setWeather] = useState<{temp: string; condition: string} | null>(null);
   const [isRaining, setIsRaining] = useState(false);
+  const [rainEnabled, setRainEnabled] = useState(true);
+  const [petEnabled, setPetEnabled] = useState(true);
   const [petHealth, setPetHealth] = useState(50);
   const [showReactionGame, setShowReactionGame] = useState(false);
   const mountedRef = useRef(true);
 
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  // Staggered mount animations — each element cascades in
+  const clockAnim = useRef(new Animated.Value(0)).current;
+  const weatherAnim = useRef(new Animated.Value(0)).current;
+  const quoteAnim = useRef(new Animated.Value(0)).current;
+  const petAnim = useRef(new Animated.Value(0)).current;
+  const quickAppsAnim = useRef(new Animated.Value(0)).current;
+  const dockSlide = useRef(new Animated.Value(40)).current;
+  const dockOpacity = useRef(new Animated.Value(0)).current;
   // Launch animation
   const launchScale = useRef(new Animated.Value(1)).current;
   const launchOpacity = useRef(new Animated.Value(1)).current;
@@ -427,9 +442,25 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   }, [launchScale, launchOpacity]);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {toValue: 1, duration: 400, useNativeDriver: true}),
-      Animated.timing(slideAnim, {toValue: 0, duration: 400, useNativeDriver: true}),
+    // Staggered cascade: clock → weather → quote → pet → quick apps → dock
+    const fadeIn = (anim: Animated.Value) =>
+      Animated.timing(anim, {toValue: 1, duration: 150, useNativeDriver: true});
+    const pause = (ms: number) =>
+      Animated.delay(ms);
+    Animated.sequence([
+      fadeIn(clockAnim),
+      pause(30),
+      fadeIn(weatherAnim),
+      pause(30),
+      fadeIn(quoteAnim),
+      pause(30),
+      fadeIn(petAnim),
+      pause(30),
+      fadeIn(quickAppsAnim),
+      Animated.parallel([
+        Animated.spring(dockSlide, {toValue: 0, useNativeDriver: true, friction: 10, tension: 60}),
+        Animated.timing(dockOpacity, {toValue: 1, duration: 200, useNativeDriver: true}),
+      ]),
     ]).start();
     return () => { mountedRef.current = false; };
   }, []);
@@ -460,6 +491,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (parallax !== null) setParallaxEnabled(parallax === 'true');
         const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
         if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
+        const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
+        if (rain !== null) setRainEnabled(rain === 'true');
+        const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
+        if (pet !== null) setPetEnabled(pet === 'true');
       } catch (e) {}
     };
     loadSettings();
@@ -472,6 +507,13 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
       // Reset launch animation
       launchScale.setValue(1);
       launchOpacity.setValue(1);
+      // Re-animate dock slide-up on return
+      dockSlide.setValue(30);
+      dockOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(dockSlide, {toValue: 0, useNativeDriver: true, friction: 10, tension: 60}),
+        Animated.timing(dockOpacity, {toValue: 1, duration: 200, useNativeDriver: true}),
+      ]).start();
       try {
         const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
@@ -489,6 +531,10 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (parallax !== null) setParallaxEnabled(parallax === 'true');
         const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
         if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
+        const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
+        if (rain !== null) setRainEnabled(rain === 'true');
+        const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
+        if (pet !== null) setPetEnabled(pet === 'true');
       } catch (e) {}
     });
     return unsubscribe;
@@ -544,6 +590,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     loadPet();
   }, []);
 
+  const petHealthRef = useRef(petHealth);
+  petHealthRef.current = petHealth;
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
       try {
@@ -552,20 +601,20 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         const gap = lastFed ? now - parseInt(lastFed, 10) : 0;
         // Feed pet if > 30 minutes since last feed (reward low screen time)
         if (!lastFed || gap > 30 * 60 * 1000) {
-          const newHealth = Math.min(100, petHealth + 5);
+          const newHealth = Math.min(100, petHealthRef.current + 5);
           setPetHealth(newHealth);
           await AsyncStorage.setItem(STORAGE_KEYS.petHealth, String(newHealth));
           await AsyncStorage.setItem(STORAGE_KEYS.petLastFed, String(now));
         } else if (gap < 5 * 60 * 1000) {
           // Too frequent pickups - decrease health slightly
-          const newHealth = Math.max(0, petHealth - 1);
+          const newHealth = Math.max(0, petHealthRef.current - 1);
           setPetHealth(newHealth);
           await AsyncStorage.setItem(STORAGE_KEYS.petHealth, String(newHealth));
         }
       } catch (e) {}
     });
     return unsubscribe;
-  }, [navigation, petHealth]);
+  }, [navigation]);
 
   // Swipe gestures
   const navigateToRef = useRef(navigateTo);
@@ -605,96 +654,146 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     return <Text style={styles.quickAppLetter}>{name.charAt(0).toUpperCase()}</Text>;
   }, [getAppName]);
 
+  // Settings gear rotation on press
+  const settingsRotation = useRef(new Animated.Value(0)).current;
+  const settingsRotationInterp = settingsRotation.interpolate({inputRange: [0, 1], outputRange: ['0deg', '90deg']});
+
+  // Quick app press feedback
+  const quickAppScales = useRef<Record<string, Animated.Value>>({}).current;
+  const getQuickAppScale = useCallback((pkg: string) => {
+    if (!quickAppScales[pkg]) quickAppScales[pkg] = new Animated.Value(1);
+    return quickAppScales[pkg];
+  }, [quickAppScales]);
+
+  // Pet long-press pulse
+  const petPulse = useRef(new Animated.Value(1)).current;
+  const petPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+
   return (
     <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
 
       <Animated.View style={[{flex: 1}, {opacity: launchOpacity, transform: [{scale: launchScale}]}]}>
-        <Animated.View style={[styles.content, {opacity: fadeAnim, transform: [{translateY: slideAnim}]}]}>
-          {/* Settings — subtle top-right icon */}
+        <View style={styles.content}>
+          {/* Settings — rotate on press */}
           <TouchableOpacity
             style={styles.settingsBtn}
             activeOpacity={0.6}
             hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            onPressIn={() => Animated.spring(settingsRotation, {toValue: 1, useNativeDriver: true, friction: 6}).start()}
+            onPressOut={() => Animated.spring(settingsRotation, {toValue: 0, useNativeDriver: true, friction: 6}).start()}
             onPress={() => navigateTo('Settings')}>
-            <SettingsIcon size={14} color={Colors.textMuted} />
+            <Animated.View style={{transform: [{rotate: settingsRotationInterp}]}}>
+              <SettingsIcon size={14} color={Colors.textMuted} />
+            </Animated.View>
           </TouchableOpacity>
 
-          {/* Clock — isolated memo component */}
-          <ClockWidget clockFormat={clockFormat} accentColor={accentColor} glitchEnabled={glitchEnabled} parallaxEnabled={parallaxEnabled} asciiEnabled={asciiClockEnabled} />
+          {/* Clock — staggered fade in */}
+          <Animated.View style={{opacity: clockAnim, transform: [{translateY: clockAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
+            <ClockWidget clockFormat={clockFormat} accentColor={accentColor} glitchEnabled={glitchEnabled} parallaxEnabled={parallaxEnabled} asciiEnabled={asciiClockEnabled} />
+          </Animated.View>
 
-          {/* Weather */}
+          {/* Weather — staggered */}
           {weather && (
-            <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
+            <Animated.View style={{opacity: weatherAnim, transform: [{translateX: weatherAnim.interpolate({inputRange: [0, 1], outputRange: [-12, 0]})}]}}>
+              <Text style={styles.weather}>{weather.temp} · {weather.condition}</Text>
+            </Animated.View>
           )}
 
-          {/* Quote */}
+          {/* Quote — staggered */}
           {quote.length > 0 && (
-            <View style={[styles.quoteWrap, {borderLeftColor: accentColor}]}>
-              <Text style={styles.quoteText}>"{quote}"</Text>
-            </View>
+            <Animated.View style={{opacity: quoteAnim, transform: [{translateY: quoteAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
+              <View style={[styles.quoteWrap, {borderLeftColor: accentColor}]}>
+                <Text style={styles.quoteText}>"{quote}"</Text>
+              </View>
+            </Animated.View>
           )}
 
-          {/* Pixel Pet */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onLongPress={() => setShowReactionGame(true)}
-            delayLongPress={600}>
-            <PixelPet health={petHealth} accentColor={accentColor} />
-          </TouchableOpacity>
+          {/* Pixel Pet — with long-press pulse indicator */}
+          {petEnabled && (
+          <Animated.View style={{opacity: petAnim, transform: [{scale: petPulse}, {translateY: petAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPressIn={() => {
+                petPulseLoop.current = Animated.loop(
+                  Animated.sequence([
+                    Animated.timing(petPulse, {toValue: 1.06, duration: 300, useNativeDriver: true}),
+                    Animated.timing(petPulse, {toValue: 1, duration: 300, useNativeDriver: true}),
+                  ])
+                );
+                petPulseLoop.current.start();
+              }}
+              onPressOut={() => {
+                if (petPulseLoop.current) petPulseLoop.current.stop();
+                petPulse.setValue(1);
+              }}
+              onLongPress={() => setShowReactionGame(true)}
+              delayLongPress={600}>
+              <PixelPet health={petHealth} accentColor={accentColor} />
+            </TouchableOpacity>
+          </Animated.View>
+          )}
 
-          {/* Quick Access Apps */}
+          {/* Quick Access Apps — staggered + press feedback */}
           {quickApps.length > 0 && (
-            <View style={styles.quickAppsSection}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.quickAppsScroll}>
-                {quickApps.map((pkg) => (
-                  <TouchableOpacity
-                    key={pkg}
-                    style={styles.quickAppItem}
-                    activeOpacity={0.6}
-                    onPress={() => launchQuickApp(pkg)}>
-                    <View style={styles.quickAppIcon}>
-                      {renderQuickAppIcon(pkg)}
-                    </View>
-                    <Text style={styles.quickAppName} numberOfLines={1}>
-                      {getAppName(pkg).slice(0, 6)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+            <Animated.View style={{opacity: quickAppsAnim, transform: [{translateY: quickAppsAnim.interpolate({inputRange: [0, 1], outputRange: [8, 0]})}]}}>
+              <View style={styles.quickAppsSection}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.quickAppsScroll}>
+                  {quickApps.map((pkg) => {
+                    const scale = getQuickAppScale(pkg);
+                    return (
+                      <TouchableOpacity
+                        key={pkg}
+                        activeOpacity={1}
+                        onPressIn={() => Animated.spring(scale, {toValue: 0.88, useNativeDriver: true, friction: 6}).start()}
+                        onPressOut={() => Animated.spring(scale, {toValue: 1, useNativeDriver: true, friction: 6}).start()}
+                        onPress={() => launchQuickApp(pkg)}>
+                        <Animated.View style={[styles.quickAppItem, {transform: [{scale}]}]}>
+                          <View style={styles.quickAppIcon}>
+                            {renderQuickAppIcon(pkg)}
+                          </View>
+                          <Text style={styles.quickAppName} numberOfLines={1}>
+                            {getAppName(pkg).slice(0, 6)}
+                          </Text>
+                        </Animated.View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </Animated.View>
           )}
-        </Animated.View>
-      </Animated.View>
+        </View>
 
-      {/* Favorites Dock — customizable */}
-      <View style={styles.dock}>
-        {dockApps.map((pkg) => {
-          const IconComp = APP_ICON_MAP[pkg];
+        {/* Piano Keys Dock — slides up on mount */}
+        <Animated.View style={[styles.pianoDock, {opacity: dockOpacity, transform: [{translateY: dockSlide}]}]}>
+          {dockApps.map((pkg, idx) => {
           const name = getAppName(pkg);
           const label = name.slice(0, 5).toUpperCase();
           return (
-            <DockItem
+            <PianoKey
               key={pkg}
               label={label}
-              IconComponent={IconComp}
-              fallbackLetter={name.charAt(0).toUpperCase()}
+              isBlack={idx % 2 === 1}
+              accentColor={accentColor}
               onPress={() => launchWithAnimation(pkg)}
             />
           );
         })}
-        <DockItem
+        <PianoKey
           label="APPS"
-          IconComponent={GridIcon}
+          isBlack={dockApps.length % 2 === 1}
+          accentColor={accentColor}
           onPress={() => navigateTo('AppDrawer')}
         />
-      </View>
+        </Animated.View>
+      </Animated.View>
 
-      {/* Rain Effect — shows when weather indicates rain */}
-      {isRaining && <RainEffect accentColor={accentColor} />}
+      {/* Rain Effect — shows when weather indicates rain AND toggle is on */}
+      {isRaining && rainEnabled && <RainEffect accentColor={accentColor} />}
 
       {/* Reaction Time Game Modal */}
       {showReactionGame && (
@@ -704,23 +803,46 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   );
 };
 
-const DockItem = memo(({label, IconComponent, fallbackLetter, onPress}: {label: string; IconComponent?: React.FC<any>; fallbackLetter?: string; onPress?: () => void}) => (
-  <TouchableOpacity
-    style={styles.dockItem}
-    activeOpacity={0.6}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityLabel={`Open ${label}`}>
-    <View style={styles.dockIcon}>
-      {IconComponent ? (
-        <IconComponent size={18} />
-      ) : (
-        <Text style={styles.dockLetter}>{fallbackLetter || label.charAt(0)}</Text>
+const PianoKey = memo(({label, isBlack, accentColor, onPress}: {label: string; isBlack: boolean; accentColor: string; onPress?: () => void}) => {
+  const [pressed, setPressed] = useState(false);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    setPressed(true);
+    Animated.spring(scaleAnim, {toValue: 0.95, useNativeDriver: true, friction: 8}).start();
+  };
+
+  const handlePressOut = () => {
+    setPressed(false);
+    Animated.spring(scaleAnim, {toValue: 1, useNativeDriver: true, friction: 8}).start();
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${label}`}
+      style={styles.pianoKeyTouchable}>
+      {pressed && (
+        <Text style={[styles.pianoKeyLabel, {color: accentColor}]}>{label}</Text>
       )}
-    </View>
-    <Text style={styles.dockLabel}>{label}</Text>
-  </TouchableOpacity>
-));
+      <Animated.View
+        style={[
+          styles.pianoKey,
+          isBlack ? styles.pianoKeyBlack : styles.pianoKeyWhite,
+          pressed && {borderTopColor: accentColor},
+          {transform: [{scaleY: scaleAnim}]},
+        ]}>
+        <Text style={[styles.pianoKeyChar, isBlack ? styles.pianoKeyCharBlack : null]}>
+          {label.charAt(0)}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -839,50 +961,63 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     zIndex: 1,
   },
-  dock: {
+  // Piano Keys Dock
+  pianoDock: {
     position: 'absolute',
-    bottom: 40,
-    left: Spacing.xl,
-    right: Spacing.xl,
-    height: 72,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.sharp,
+    bottom: 0,
+    left: -Spacing.xl,
+    right: -Spacing.xl,
+    height: 90,
     flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  pianoKeyTouchable: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: Spacing.base,
+    height: 90,
+    justifyContent: 'flex-end',
   },
-  dockItem: {
+  pianoKey: {
+    width: '100%',
+    height: 72,
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'flex-end',
+    paddingBottom: 12,
+    borderTopWidth: 2,
+    borderTopColor: 'transparent',
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Colors.border,
   },
-  dockIcon: {
-    width: 40,
-    height: 40,
-    backgroundColor: Colors.surface2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.sharp,
-    alignItems: 'center',
-    justifyContent: 'center',
+  pianoKeyWhite: {
+    backgroundColor: '#111111',
   },
-  dockLabel: {
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
+  pianoKeyBlack: {
+    backgroundColor: '#060606',
+    height: 60,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
   },
-  dockLetter: {
+  pianoKeyChar: {
     fontFamily: 'monospace',
     fontSize: 14,
-    color: Colors.textPrimary,
-    fontWeight: '500',
+    color: Colors.textMuted,
+    fontWeight: '300',
+    letterSpacing: 1,
+  },
+  pianoKeyCharBlack: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+  },
+  pianoKeyLabel: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    letterSpacing: 1.5,
+    marginBottom: 3,
+    textTransform: 'uppercase',
   },
   // Rain effect
   rainContainer: {
     ...StyleSheet.absoluteFillObject,
-    pointerEvents: 'none',
     overflow: 'hidden',
   },
   rainDrop: {

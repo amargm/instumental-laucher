@@ -63,7 +63,7 @@ const App = () => {
             <Stack.Screen
               name="Home"
               component={HomeWithBoundary}
-              options={{animation: 'none'}}
+              options={{animation: 'fade', animationDuration: 120}}
             />
             <Stack.Screen
               name="AppDrawer"
@@ -73,12 +73,12 @@ const App = () => {
             <Stack.Screen
               name="Settings"
               component={SettingsWithBoundary}
-              options={{animation: 'slide_from_right'}}
+              options={{animation: 'slide_from_right', animationDuration: 150}}
             />
             <Stack.Screen
               name="Notifications"
               component={NotificationsWithBoundary}
-              options={{animation: 'slide_from_bottom'}}
+              options={{animation: 'slide_from_bottom', animationDuration: 100}}
             />
           </Stack.Navigator>
         </NavigationContainer>

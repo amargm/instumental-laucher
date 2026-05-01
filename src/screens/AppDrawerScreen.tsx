@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
   Animated,
+  AppState,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
@@ -166,6 +167,17 @@ const AppDrawerScreen: React.FC<Props> = ({navigation}) => {
     });
     return unsubscribe;
   }, [navigation, launchScale, launchOpacity]);
+
+  // Also reset on app returning from background (external app launched)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        launchScale.setValue(1);
+        launchOpacity.setValue(1);
+      }
+    });
+    return () => sub.remove();
+  }, [launchScale, launchOpacity]);
 
   const renderApp = useCallback(({item}: {item: AppInfo}) => (
     <AppItem item={item} onPress={handleLaunch} />

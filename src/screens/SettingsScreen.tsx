@@ -29,6 +29,8 @@ const STORAGE_KEYS = {
   glitchEnabled: '@settings_glitch_enabled',
   parallaxEnabled: '@settings_parallax_enabled',
   asciiClockEnabled: '@settings_ascii_clock_enabled',
+  rainEnabled: '@settings_rain_enabled',
+  petEnabled: '@settings_pet_enabled',
 };
 
 const ACCENT_COLORS = [
@@ -46,6 +48,8 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [glitchEnabled, setGlitchEnabled] = useState(true);
   const [parallaxEnabled, setParallaxEnabled] = useState(true);
   const [asciiClockEnabled, setAsciiClockEnabled] = useState(false);
+  const [rainEnabled, setRainEnabled] = useState(true);
+  const [petEnabled, setPetEnabled] = useState(true);
   const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
   const [notifAccess, setNotifAccess] = useState(false);
   const [showAppPicker, setShowAppPicker] = useState(false);
@@ -74,6 +78,10 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         if (parallax !== null) setParallaxEnabled(parallax === 'true');
         const ascii = await AsyncStorage.getItem(STORAGE_KEYS.asciiClockEnabled);
         if (ascii !== null) setAsciiClockEnabled(ascii === 'true');
+        const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
+        if (rain !== null) setRainEnabled(rain === 'true');
+        const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
+        if (pet !== null) setPetEnabled(pet === 'true');
       } catch (e) {}
     };
     loadSettings();
@@ -175,6 +183,16 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const toggleAsciiClock = (value: boolean) => {
     setAsciiClockEnabled(value);
     safeSave(STORAGE_KEYS.asciiClockEnabled, String(value));
+  };
+
+  const toggleRain = (value: boolean) => {
+    setRainEnabled(value);
+    safeSave(STORAGE_KEYS.rainEnabled, String(value));
+  };
+
+  const togglePet = (value: boolean) => {
+    setPetEnabled(value);
+    safeSave(STORAGE_KEYS.petEnabled, String(value));
   };
 
   if (showAppPicker) {
@@ -450,6 +468,38 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             onValueChange={toggleAsciiClock}
             trackColor={{false: Colors.surface2, true: Colors.accent}}
             thumbColor={asciiClockEnabled ? Colors.bg : Colors.textMuted}
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>☔</Text>
+            <View>
+              <Text style={styles.settingName}>Rain Effect</Text>
+              <Text style={styles.settingDesc}>Particle drops when raining</Text>
+            </View>
+          </View>
+          <Switch
+            value={rainEnabled}
+            onValueChange={toggleRain}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={rainEnabled ? Colors.bg : Colors.textMuted}
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>◉</Text>
+            <View>
+              <Text style={styles.settingName}>Pixel Pet</Text>
+              <Text style={styles.settingDesc}>ASCII creature on home screen</Text>
+            </View>
+          </View>
+          <Switch
+            value={petEnabled}
+            onValueChange={togglePet}
+            trackColor={{false: Colors.surface2, true: Colors.accent}}
+            thumbColor={petEnabled ? Colors.bg : Colors.textMuted}
           />
         </View>
 
