@@ -535,17 +535,21 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         setAudioDevice(device);
 
         if (device.connected && !wasConnected) {
-          // Headphones just connected — fade in music button
-          Animated.parallel([
-            Animated.timing(musicBtnOpacity, {toValue: 1, duration: 400, useNativeDriver: true}),
-            Animated.spring(musicBtnScale, {toValue: 1, useNativeDriver: true, friction: 6, tension: 60}),
+          // Headphones just connected — slow cinematic fade in
+          musicBtnScale.setValue(0.6);
+          Animated.sequence([
+            Animated.delay(300),
+            Animated.parallel([
+              Animated.timing(musicBtnOpacity, {toValue: 1, duration: 800, useNativeDriver: true}),
+              Animated.spring(musicBtnScale, {toValue: 1, useNativeDriver: true, friction: 8, tension: 40}),
+            ]),
           ]).start();
         } else if (!device.connected && wasConnected) {
-          // Headphones just disconnected — fade out music button & collapse list
+          // Headphones just disconnected — slow fade out + shrink
           setMusicAppsOpen(false);
           Animated.parallel([
-            Animated.timing(musicBtnOpacity, {toValue: 0, duration: 400, useNativeDriver: true}),
-            Animated.timing(musicBtnScale, {toValue: 0.8, duration: 300, useNativeDriver: true}),
+            Animated.timing(musicBtnOpacity, {toValue: 0, duration: 800, useNativeDriver: true}),
+            Animated.timing(musicBtnScale, {toValue: 0.6, duration: 600, useNativeDriver: true}),
           ]).start();
         } else if (device.connected) {
           // Already connected on mount — show button immediately
@@ -570,15 +574,19 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         prevConnectedRef.current = device.connected;
         setAudioDevice(device);
         if (device.connected && !wasConnected) {
-          Animated.parallel([
-            Animated.timing(musicBtnOpacity, {toValue: 1, duration: 400, useNativeDriver: true}),
-            Animated.spring(musicBtnScale, {toValue: 1, useNativeDriver: true, friction: 6, tension: 60}),
+          musicBtnScale.setValue(0.6);
+          Animated.sequence([
+            Animated.delay(300),
+            Animated.parallel([
+              Animated.timing(musicBtnOpacity, {toValue: 1, duration: 800, useNativeDriver: true}),
+              Animated.spring(musicBtnScale, {toValue: 1, useNativeDriver: true, friction: 8, tension: 40}),
+            ]),
           ]).start();
         } else if (!device.connected && wasConnected) {
           setMusicAppsOpen(false);
           Animated.parallel([
-            Animated.timing(musicBtnOpacity, {toValue: 0, duration: 400, useNativeDriver: true}),
-            Animated.timing(musicBtnScale, {toValue: 0.8, duration: 300, useNativeDriver: true}),
+            Animated.timing(musicBtnOpacity, {toValue: 0, duration: 800, useNativeDriver: true}),
+            Animated.timing(musicBtnScale, {toValue: 0.6, duration: 600, useNativeDriver: true}),
           ]).start();
         } else if (device.connected) {
           musicBtnOpacity.setValue(1);
@@ -731,7 +739,9 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
               {weather ? `${weather.temp} · ${weather.condition}` : '-- °C · ---'}
               {audioDevice.connected ? (
                 <Text style={styles.headphoneIndicator}>
-                  {'  🎧 '}{audioDevice.name || (audioDevice.type === 'wired' ? 'Wired' : 'Audio')}
+                  {'  🎧 '}{audioDevice.name && !audioDevice.name.toLowerCase().includes('unknown')
+                    ? audioDevice.name
+                    : audioDevice.type === 'wired' ? 'Wired' : audioDevice.type === 'usb' ? 'USB' : 'Connected'}
                 </Text>
               ) : null}
             </Text>
@@ -794,7 +804,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
                 activeOpacity={0.7}
                 onPress={toggleMusicApps}>
                 <Text style={[styles.musicToggleText, musicAppsOpen && {color: accentColor}]}>
-                  🎧 {musicAppsOpen ? 'HIDE' : 'MUSIC'}
+                  🎧 {musicAppsOpen ? 'HIDE' : 'LISTENING'}
                 </Text>
               </TouchableOpacity>
               {musicAppsOpen && (

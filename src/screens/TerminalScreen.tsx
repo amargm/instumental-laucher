@@ -103,6 +103,15 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     return () => sub.remove();
   }, []);
 
+  // Auto-focus input on mount to open keyboard
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+      setIsTyping(true);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Cursor blink animation
   useEffect(() => {
     const blink = Animated.loop(
@@ -207,9 +216,11 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
     ? `${batteryBar} ${dashboard.battery.level}%${dashboard.battery.isCharging ? ' ⚡' : ''}`
     : '';
 
+  const wifiName = dashboard.connectivity?.wifiName;
+  const cleanWifiName = wifiName && !wifiName.toLowerCase().includes('unknown') ? wifiName : 'WiFi';
   const connectText = dashboard.connectivity
     ? dashboard.connectivity.isWifi
-      ? `◦ ${dashboard.connectivity.wifiName || 'WiFi'}`
+      ? `◦ ${cleanWifiName}`
       : dashboard.connectivity.isCellular
         ? '◦ LTE'
         : '✕ offline'
@@ -311,15 +322,10 @@ const TerminalScreen: React.FC<Props> = ({navigation}) => {
                 </View>
               )}
 
-              {/* Hint */}
-              {history.length === 0 && (
-                <View style={styles.dashSection}>
-                  <Text style={styles.dashLabel}>COMMANDS</Text>
-                  <Text style={styles.hintLine}>type an app name to launch</Text>
-                  <Text style={styles.hintLine}>try: weather · battery · calc · note</Text>
-                  <Text style={styles.hintLine}>type <Text style={styles.hintCmd}>help</Text> for all commands</Text>
-                </View>
-              )}
+              {/* Hint — always visible */}
+              <View style={styles.dashSection}>
+                <Text style={styles.hintLine}>type an app name to launch · <Text style={styles.hintCmd}>help</Text> for commands</Text>
+              </View>
             </>
           )}
         </Animated.View>

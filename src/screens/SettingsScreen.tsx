@@ -396,7 +396,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>↕</Text>
             <View>
               <Text style={styles.settingName}>Swipe Gestures</Text>
-              <Text style={styles.settingDesc}>↓ notifications · ↑ app drawer</Text>
+              <Text style={styles.settingDesc}>↓ terminal · ↑ app drawer</Text>
             </View>
           </View>
           <Switch
@@ -463,7 +463,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>◉</Text>
             <View>
               <Text style={styles.settingName}>Pixel Pet</Text>
-              <Text style={styles.settingDesc}>ASCII pet · hold to play · health tracks usage</Text>
+              <Text style={styles.settingDesc}>ASCII pet · mood tracks screen usage</Text>
             </View>
           </View>
           <Switch
@@ -530,26 +530,29 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
         <View style={styles.guideBlock}>
           <Text style={styles.guideSection}>GESTURES</Text>
-          <Text style={styles.guideItem}>↓  swipe down on home  →  notifications</Text>
+          <Text style={styles.guideItem}>↓  swipe down on home  →  terminal</Text>
           <Text style={styles.guideItem}>↑  swipe up on home    →  app drawer</Text>
+          <Text style={styles.guideSection}>TERMINAL</Text>
+          <Text style={styles.guideItem}>⌨  type app name       →  fuzzy search + launch</Text>
+          <Text style={styles.guideItem}>⌨  type "help"          →  see all commands</Text>
+          <Text style={styles.guideItem}>⌨  commands: battery · weather · calc · note</Text>
           <Text style={styles.guideSection}>PROGRESS BARS</Text>
           <Text style={styles.guideItem}>▬  top bar (DAY)    →  % of day elapsed</Text>
           <Text style={styles.guideItem}>▬  thin bar (WK)    →  week progress Mon→Sun</Text>
           <Text style={styles.guideSection}>PIXEL PET</Text>
-          <Text style={styles.guideItem}>◉  hold pet 0.6s    →  reaction time game</Text>
           <Text style={styles.guideItem}>   health goes up when you use phone less</Text>
           <Text style={styles.guideItem}>   health goes down with frequent pickups</Text>
-          <Text style={styles.guideSection}>PIANO DOCK</Text>
-          <Text style={styles.guideItem}>▮  press and hold key  →  shows app name</Text>
-          <Text style={styles.guideItem}>▮  rightmost key       →  opens app drawer</Text>
+          <Text style={styles.guideItem}>   mood: feeling good / doing okay / needs a break</Text>
+          <Text style={styles.guideSection}>HEADPHONE MODE</Text>
+          <Text style={styles.guideItem}>🎧 headphones plugged  →  device name shown</Text>
+          <Text style={styles.guideItem}>🎧 audio apps button   →  quick-launch music</Text>
           <Text style={styles.guideSection}>APP DRAWER</Text>
           <Text style={styles.guideItem}>⌕  tap search icon     →  search by name</Text>
           <Text style={styles.guideItem}>▤  category pills      →  filter by type</Text>
-          <Text style={styles.guideItem}>🎧 headphones plugged  →  music apps first</Text>
+          <Text style={styles.guideItem}>◎  long-press app      →  app info / uninstall</Text>
           <Text style={styles.guideSection}>EFFECTS</Text>
           <Text style={styles.guideItem}>▓  glitch    →  random char swap on clock</Text>
           <Text style={styles.guideItem}>◇  parallax  →  tilt phone to shift clock</Text>
-          <Text style={styles.guideItem}>█  ASCII     →  block-letter clock display</Text>
           <Text style={styles.guideItem}>☔ rain       →  falling particles when raining</Text>
         </View>
 
@@ -578,7 +581,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.settingIcon}>I</Text>
             <View>
               <Text style={styles.settingName}>Instrument Launcher</Text>
-              <Text style={styles.settingDesc}>Version 1.0.0</Text>
+              <Text style={styles.settingDesc}>Version 1.3.0</Text>
             </View>
           </View>
         </View>
