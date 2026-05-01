@@ -31,6 +31,7 @@ const STORAGE_KEYS = {
   asciiClockEnabled: '@settings_ascii_clock_enabled',
   rainEnabled: '@settings_rain_enabled',
   petEnabled: '@settings_pet_enabled',
+  dockStyle: '@settings_dock_style',
 };
 
 const ACCENT_COLORS = [
@@ -50,6 +51,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [asciiClockEnabled, setAsciiClockEnabled] = useState(false);
   const [rainEnabled, setRainEnabled] = useState(true);
   const [petEnabled, setPetEnabled] = useState(true);
+  const [dockStyle, setDockStyle] = useState<'terminal' | 'piano'>('terminal');
   const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
   const [notifAccess, setNotifAccess] = useState(false);
   const [showAppPicker, setShowAppPicker] = useState(false);
@@ -82,6 +84,8 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         if (rain !== null) setRainEnabled(rain === 'true');
         const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
         if (pet !== null) setPetEnabled(pet === 'true');
+        const ds = await AsyncStorage.getItem(STORAGE_KEYS.dockStyle);
+        if (ds === 'terminal' || ds === 'piano') setDockStyle(ds);
       } catch (e) {}
     };
     loadSettings();
@@ -193,6 +197,12 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const togglePet = (value: boolean) => {
     setPetEnabled(value);
     safeSave(STORAGE_KEYS.petEnabled, String(value));
+  };
+
+  const cycleDockStyle = () => {
+    const next = dockStyle === 'terminal' ? 'piano' : 'terminal';
+    setDockStyle(next);
+    safeSave(STORAGE_KEYS.dockStyle, next);
   };
 
   if (showAppPicker) {
@@ -502,6 +512,20 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             thumbColor={petEnabled ? Colors.bg : Colors.textMuted}
           />
         </View>
+
+        <TouchableOpacity
+          style={styles.settingItem}
+          activeOpacity={0.7}
+          onPress={cycleDockStyle}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>▪</Text>
+            <View>
+              <Text style={styles.settingName}>Dock Style</Text>
+              <Text style={styles.settingDesc}>Tap to switch · {dockStyle === 'terminal' ? 'terminal labels' : 'piano keys'}</Text>
+            </View>
+          </View>
+          <Text style={styles.settingValue}>{dockStyle.toUpperCase()}</Text>
+        </TouchableOpacity>
 
         {/* Permissions */}
         <Text style={styles.groupLabel}>PERMISSIONS</Text>

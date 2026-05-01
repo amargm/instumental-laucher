@@ -44,6 +44,7 @@ const STORAGE_KEYS = {
   rainEnabled: '@settings_rain_enabled',
   petEnabled: '@settings_pet_enabled',
   hintsDismissed: '@hints_dismissed',
+  dockStyle: '@settings_dock_style',
 };
 
 const DEFAULT_DOCK: {pkg: string; label: string}[] = [
@@ -455,6 +456,7 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [rainEnabled, setRainEnabled] = useState(true);
   const [petEnabled, setPetEnabled] = useState(true);
   const [petHealth, setPetHealth] = useState(50);
+  const [dockStyle, setDockStyle] = useState<'terminal' | 'piano'>('terminal');
   const [showReactionGame, setShowReactionGame] = useState(false);
   const [showHints, setShowHints] = useState(false);
   const mountedRef = useRef(true);
@@ -544,6 +546,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (rain !== null) setRainEnabled(rain === 'true');
         const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
         if (pet !== null) setPetEnabled(pet === 'true');
+        const ds = await AsyncStorage.getItem(STORAGE_KEYS.dockStyle);
+        if (ds === 'terminal' || ds === 'piano') setDockStyle(ds);
         // Show hints on first launch
         const hintsDismissed = await AsyncStorage.getItem(STORAGE_KEYS.hintsDismissed);
         if (!hintsDismissed) setShowHints(true);
@@ -587,6 +591,8 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
         if (rain !== null) setRainEnabled(rain === 'true');
         const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
         if (pet !== null) setPetEnabled(pet === 'true');
+        const ds = await AsyncStorage.getItem(STORAGE_KEYS.dockStyle);
+        if (ds === 'terminal' || ds === 'piano') setDockStyle(ds);
       } catch (e) {}
     });
     return unsubscribe;
@@ -831,27 +837,54 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
           )}
         </View>
 
-        {/* Piano Keys Dock — slides up on mount */}
-        <Animated.View style={[styles.pianoDock, {opacity: dockOpacity, transform: [{translateY: dockSlide}]}]}>
-          {dockApps.map((pkg, idx) => {
-          const name = getAppName(pkg);
-          const label = name.slice(0, 5).toUpperCase();
-          return (
-            <PianoKey
-              key={pkg}
-              label={label}
-              isBlack={idx % 2 === 1}
-              accentColor={accentColor}
-              onPress={() => launchWithAnimation(pkg)}
-            />
-          );
-        })}
-        <PianoKey
-          label="APPS"
-          isBlack={dockApps.length % 2 === 1}
-          accentColor={accentColor}
-          onPress={() => navigateTo('AppDrawer')}
-        />
+        {/* Dock — slides up on mount */}
+        <Animated.View style={[
+          dockStyle === 'piano' ? styles.pianoDock : styles.termDock,
+          {opacity: dockOpacity, transform: [{translateY: dockSlide}]},
+        ]}>
+          {dockStyle === 'piano' ? (
+            <>
+              {dockApps.map((pkg, idx) => {
+                const name = getAppName(pkg);
+                const label = name.slice(0, 5).toUpperCase();
+                return (
+                  <PianoKey
+                    key={pkg}
+                    label={label}
+                    isBlack={idx % 2 === 1}
+                    accentColor={accentColor}
+                    onPress={() => launchWithAnimation(pkg)}
+                  />
+                );
+              })}
+              <PianoKey
+                label="APPS"
+                isBlack={dockApps.length % 2 === 1}
+                accentColor={accentColor}
+                onPress={() => navigateTo('AppDrawer')}
+              />
+            </>
+          ) : (
+            <>
+              {dockApps.map(pkg => {
+                const name = getAppName(pkg);
+                const label = name.slice(0, 4).toUpperCase();
+                return (
+                  <DockItem
+                    key={pkg}
+                    label={label}
+                    accentColor={accentColor}
+                    onPress={() => launchWithAnimation(pkg)}
+                  />
+                );
+              })}
+              <DockItem
+                label="···"
+                accentColor={accentColor}
+                onPress={() => navigateTo('AppDrawer')}
+              />
+            </>
+          )}
         </Animated.View>
       </Animated.View>
 
@@ -909,6 +942,37 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     </SafeAreaView>
   );
 };
+
+// ─── Terminal Dock Item — clean monospace label with accent underline ───
+const DockItem = memo(({label, accentColor, onPress}: {label: string; accentColor: string; onPress?: () => void}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [pressed, setPressed] = useState(false);
+
+  const handlePressIn = () => {
+    setPressed(true);
+    Animated.spring(scaleAnim, {toValue: 0.9, useNativeDriver: true, friction: 8}).start();
+  };
+  const handlePressOut = () => {
+    setPressed(false);
+    Animated.spring(scaleAnim, {toValue: 1, useNativeDriver: true, friction: 8}).start();
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${label}`}
+      style={styles.termDockItem}>
+      <Animated.View style={[styles.termDockInner, {transform: [{scale: scaleAnim}]}]}>
+        <Text style={[styles.termDockLabel, pressed && {color: accentColor}]}>{label}</Text>
+        <View style={[styles.termDockLine, {backgroundColor: pressed ? accentColor : Colors.border}]} />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
 
 const PianoKey = memo(({label, isBlack, accentColor, onPress}: {label: string; isBlack: boolean; accentColor: string; onPress?: () => void}) => {
   const [pressed, setPressed] = useState(false);
@@ -1094,6 +1158,42 @@ const styles = StyleSheet.create({
     right: 0,
     padding: Spacing.sm,
     zIndex: 1,
+  },
+  // Terminal Dock
+  termDock: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.bg,
+  },
+  termDockItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+  },
+  termDockInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  termDockLabel: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: Colors.textMuted,
+    letterSpacing: 2,
+    fontWeight: '400',
+  },
+  termDockLine: {
+    width: 12,
+    height: 1,
+    marginTop: 5,
+    borderRadius: 1,
   },
   // Piano Keys Dock
   pianoDock: {
