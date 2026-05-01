@@ -1,5 +1,6 @@
 package com.instrument.launcher
 
+import android.content.ComponentName
 import android.content.Intent
 import android.os.BatteryManager
 import android.media.AudioManager
@@ -8,6 +9,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.content.Context
 import android.content.IntentFilter
+import android.os.Build
 import android.provider.Settings
 import com.facebook.react.bridge.*
 
@@ -271,6 +273,75 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
             result.putString("name", "")
             result.putString("type", "none")
             promise.resolve(result)
+        }
+    }
+
+    // ─── Launcher Role ───────────────────────────────────────
+
+    @ReactMethod
+    fun isDefaultLauncher(promise: Promise) {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN)
+            intent.addCategory(Intent.CATEGORY_HOME)
+            val resolveInfo = reactApplicationContext.packageManager.resolveActivity(
+                intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+            )
+            val currentLauncher = resolveInfo?.activityInfo?.packageName ?: ""
+            promise.resolve(currentLauncher == reactApplicationContext.packageName)
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun openDefaultLauncherChooser(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ — use RoleManager for clean system dialog
+                val roleManager = reactApplicationContext.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
+                if (roleManager != null && !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)) {
+                    val roleIntent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
+                    val activity = currentActivity
+                    if (activity != null) {
+                        activity.startActivityForResult(roleIntent, 1001)
+                        promise.resolve(true)
+                        return
+                    }
+                } else if (roleManager != null && roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)) {
+                    // Already default
+                    promise.resolve(true)
+                    return
+                }
+            }
+            // Fallback for pre-Q or if RoleManager unavailable — open Home settings
+            val intent = Intent(Settings.ACTION_HOME_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            reactApplicationContext.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            // Last resort — open general app settings
+            try {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                reactApplicationContext.startActivity(intent)
+                promise.resolve(true)
+            } catch (e2: Exception) {
+                promise.reject("ERROR", e2.message)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun getCurrentLauncherPackage(promise: Promise) {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN)
+            intent.addCategory(Intent.CATEGORY_HOME)
+            val resolveInfo = reactApplicationContext.packageManager.resolveActivity(
+                intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+            )
+            promise.resolve(resolveInfo?.activityInfo?.packageName ?: "unknown")
+        } catch (e: Exception) {
+            promise.resolve("unknown")
         }
     }
 }

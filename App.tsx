@@ -1,9 +1,9 @@
-import React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
+import React, {useRef, useEffect} from 'react';
+import {NavigationContainer, NavigationContainerRef} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import {StyleSheet} from 'react-native';
+import {StyleSheet, DeviceEventEmitter} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -65,10 +65,29 @@ const TerminalWithBoundary = (props: any) => (
 );
 
 const App = () => {
+  const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+
+  // When app is the default launcher and user presses Home button,
+  // Android sends a new intent → MainActivity.onNewIntent emits 'onHomePressed'.
+  // We navigate back to Home screen if on a sub-screen.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('onHomePressed', () => {
+      const state = navRef.current?.getRootState();
+      if (state && state.routes.length > 0) {
+        const currentRoute = state.routes[state.index ?? 0]?.name;
+        if (currentRoute !== 'Home') {
+          navRef.current?.reset({index: 0, routes: [{name: 'Home'}]});
+        }
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <NavigationContainer
+          ref={navRef}
           theme={{
             dark: true,
             colors: {

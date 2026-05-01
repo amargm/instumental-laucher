@@ -112,3 +112,17 @@ export interface AudioDeviceInfo {
 export async function getConnectedAudioDevice(): Promise<AudioDeviceInfo> {
   return DeviceInfo.getConnectedAudioDevice();
 }
+
+// ─── Launcher Role ───────────────────────────────────────
+
+export async function isDefaultLauncher(): Promise<boolean> {
+  return DeviceInfo.isDefaultLauncher();
+}
+
+export async function openDefaultLauncherChooser(): Promise<boolean> {
+  return DeviceInfo.openDefaultLauncherChooser();
+}
+
+export async function getCurrentLauncherPackage(): Promise<string> {
+  return DeviceInfo.getCurrentLauncherPackage();
+}

@@ -12,7 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Colors, Spacing, Radius} from '../theme/tokens';
-import {getBatteryInfo, isNotificationAccessGranted, openNotificationListenerSettings} from '../native/DeviceInfo';
+import {getBatteryInfo, isNotificationAccessGranted, openNotificationListenerSettings, isDefaultLauncher, openDefaultLauncherChooser} from '../native/DeviceInfo';
 import {openSystemSettings, getInstalledApps, AppInfo} from '../native/InstalledApps';
 
 interface Props {
@@ -41,6 +41,7 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [petEnabled, setPetEnabled] = useState(true);
   const [battery, setBattery] = useState({level: 0, isCharging: false, temperature: 0});
   const [notifAccess, setNotifAccess] = useState(false);
+  const [isDefault, setIsDefault] = useState(false);
   const [showAppPicker, setShowAppPicker] = useState(false);
   const [showDockPicker, setShowDockPicker] = useState(false);
   const [allApps, setAllApps] = useState<AppInfo[]>([]);
@@ -85,9 +86,19 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
         const access = await isNotificationAccessGranted();
         setNotifAccess(access);
       } catch (e) {}
+      try {
+        const def = await isDefaultLauncher();
+        setIsDefault(def);
+      } catch (e) {}
     };
     loadDeviceInfo();
-  }, []);
+
+    // Re-check when returning from system settings
+    const unsub = navigation.addListener('focus', () => {
+      loadDeviceInfo();
+    });
+    return unsub;
+  }, [navigation]);
 
   // Load installed apps for picker
   useEffect(() => {
@@ -576,6 +587,30 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
         {/* About */}
         <Text style={styles.groupLabel}>ABOUT</Text>
+
+        <TouchableOpacity
+          style={styles.settingItem}
+          activeOpacity={0.7}
+          onPress={async () => {
+            if (!isDefault) {
+              try {
+                await openDefaultLauncherChooser();
+              } catch (e) {}
+            }
+          }}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>⌂</Text>
+            <View>
+              <Text style={styles.settingName}>Default Launcher</Text>
+              <Text style={styles.settingDesc}>
+                {isDefault ? 'Instrument is your default launcher' : 'Tap to set as default launcher'}
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.settingValue, isDefault && {color: '#4ECDC4'}]}>
+            {isDefault ? '✓' : '→'}
+          </Text>
+        </TouchableOpacity>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
