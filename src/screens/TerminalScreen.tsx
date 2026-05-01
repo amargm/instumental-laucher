@@ -427,8 +427,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: 'monospace',
-    fontSize: 11,
-    color: Colors.textMuted,
+    fontSize: 12,
+    color: Colors.textSecondary,
     letterSpacing: 3,
   },
   closeWrap: {
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   },
   closeText: {
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
     letterSpacing: 1,
   },
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   dashLabel: {
     fontFamily: 'monospace',
-    fontSize: 9,
+    fontSize: 10,
     color: Colors.textMuted,
     letterSpacing: 2,
     marginBottom: Spacing.xs,
@@ -537,13 +537,13 @@ const styles = StyleSheet.create({
   },
   historyOutput: {
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
     marginTop: 1,
   },
   historyTime: {
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
   },
   // Hints
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
   },
   resultSecondary: {
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
     marginTop: 2,
   },

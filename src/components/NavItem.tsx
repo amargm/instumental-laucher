@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
     letterSpacing: 2,
   },

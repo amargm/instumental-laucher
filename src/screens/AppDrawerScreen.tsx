@@ -467,8 +467,8 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
   },
   title: {
-    fontSize: 11,
-    color: Colors.textMuted,
+    fontSize: 12,
+    color: Colors.textSecondary,
     letterSpacing: 3,
   },
   searchToggle: {
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface2,
   },
   filterLabel: {
-    fontSize: 9,
+    fontSize: 10,
     color: Colors.textMuted,
     letterSpacing: 1,
   },
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   appCount: {
-    fontSize: 9,
+    fontSize: 10,
     color: Colors.textMuted,
     letterSpacing: 2,
     paddingHorizontal: Spacing.xl,
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   },
   contextTitle: {
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.textPrimary,
     letterSpacing: 1,
     marginBottom: Spacing.md,
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
   },
   contextLabel: {
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.textPrimary,
     letterSpacing: 1.5,
   },

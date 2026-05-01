@@ -5,16 +5,16 @@
 
 export const Colors = {
   bg: '#0A0A0A',
-  surface: '#111111',
-  surface2: '#1A1A1A',
-  border: '#3A3A3A',
-  textPrimary: '#F0F0F0',
-  textSecondary: '#888888',
-  textMuted: '#555555',
+  surface: '#141414',
+  surface2: '#1E1E1E',
+  border: '#444444',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#B0B0B0',
+  textMuted: '#787878',
   accent: '#FFFFFF',
-  accentDim: '#333333',
-  danger: '#FF3B30',
-  success: '#30D158',
+  accentDim: '#444444',
+  danger: '#FF453A',
+  success: '#32D74B',
 };
 
 export const Spacing = {

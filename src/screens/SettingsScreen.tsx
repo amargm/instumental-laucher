@@ -45,32 +45,49 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [showAppPicker, setShowAppPicker] = useState(false);
   const [showDockPicker, setShowDockPicker] = useState(false);
   const [allApps, setAllApps] = useState<AppInfo[]>([]);
+  const [settingsReady, setSettingsReady] = useState(false);
 
-  // Load persisted settings
+  // Load persisted settings — single multiGet to avoid sequential renders
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const g = await AsyncStorage.getItem(STORAGE_KEYS.gesturesEnabled);
-        if (g !== null) setGesturesEnabled(g === 'true');
-        const fmt = await AsyncStorage.getItem(STORAGE_KEYS.clockFormat);
+        const keys = [
+          STORAGE_KEYS.gesturesEnabled,
+          STORAGE_KEYS.clockFormat,
+          STORAGE_KEYS.quote,
+          STORAGE_KEYS.quickApps,
+          STORAGE_KEYS.dockApps,
+          STORAGE_KEYS.accentColor,
+          STORAGE_KEYS.glitchEnabled,
+          STORAGE_KEYS.parallaxEnabled,
+          STORAGE_KEYS.rainEnabled,
+          STORAGE_KEYS.petEnabled,
+        ];
+        const results = await AsyncStorage.multiGet(keys);
+        const map = new Map(results);
+
+        const g = map.get(STORAGE_KEYS.gesturesEnabled);
+        if (g !== null && g !== undefined) setGesturesEnabled(g === 'true');
+        const fmt = map.get(STORAGE_KEYS.clockFormat);
         if (fmt === '12' || fmt === '24') setClockFormat(fmt);
-        const q = await AsyncStorage.getItem(STORAGE_KEYS.quote);
-        if (q !== null) setQuote(q);
-        const apps = await AsyncStorage.getItem(STORAGE_KEYS.quickApps);
+        const q = map.get(STORAGE_KEYS.quote);
+        if (q !== null && q !== undefined) setQuote(q);
+        const apps = map.get(STORAGE_KEYS.quickApps);
         if (apps) setQuickApps(JSON.parse(apps));
-        const dock = await AsyncStorage.getItem(STORAGE_KEYS.dockApps);
+        const dock = map.get(STORAGE_KEYS.dockApps);
         if (dock) setDockApps(JSON.parse(dock));
-        const accent = await AsyncStorage.getItem(STORAGE_KEYS.accentColor);
+        const accent = map.get(STORAGE_KEYS.accentColor);
         if (accent) setAccentColor(accent);
-        const glitch = await AsyncStorage.getItem(STORAGE_KEYS.glitchEnabled);
-        if (glitch !== null) setGlitchEnabled(glitch === 'true');
-        const parallax = await AsyncStorage.getItem(STORAGE_KEYS.parallaxEnabled);
-        if (parallax !== null) setParallaxEnabled(parallax === 'true');
-        const rain = await AsyncStorage.getItem(STORAGE_KEYS.rainEnabled);
-        if (rain !== null) setRainEnabled(rain === 'true');
-        const pet = await AsyncStorage.getItem(STORAGE_KEYS.petEnabled);
-        if (pet !== null) setPetEnabled(pet === 'true');
+        const glitch = map.get(STORAGE_KEYS.glitchEnabled);
+        if (glitch !== null && glitch !== undefined) setGlitchEnabled(glitch === 'true');
+        const parallax = map.get(STORAGE_KEYS.parallaxEnabled);
+        if (parallax !== null && parallax !== undefined) setParallaxEnabled(parallax === 'true');
+        const rain = map.get(STORAGE_KEYS.rainEnabled);
+        if (rain !== null && rain !== undefined) setRainEnabled(rain === 'true');
+        const pet = map.get(STORAGE_KEYS.petEnabled);
+        if (pet !== null && pet !== undefined) setPetEnabled(pet === 'true');
       } catch (e) {}
+      setSettingsReady(true);
     };
     loadSettings();
   }, []);
@@ -292,6 +309,16 @@ const SettingsScreen: React.FC<Props> = ({navigation}) => {
             index,
           })}
         />
+      </SafeAreaView>
+    );
+  }
+
+  if (!settingsReady) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>CONFIGURATION</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -651,8 +678,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   title: {
-    fontSize: 11,
-    color: Colors.textMuted,
+    fontSize: 12,
+    color: Colors.textSecondary,
     letterSpacing: 3,
   },
   closeBtn: {
@@ -665,7 +692,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
   },
   groupLabel: {
-    fontSize: 9,
+    fontSize: 10,
     color: Colors.textMuted,
     letterSpacing: 2,
     marginTop: Spacing.xl,
@@ -697,14 +724,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   settingDesc: {
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
     marginTop: 2,
   },
   settingValue: {
     fontFamily: 'monospace',
-    fontSize: 11,
-    color: Colors.textMuted,
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
   settingValueActive: {
     color: Colors.success,
@@ -821,10 +848,10 @@ const styles = StyleSheet.create({
   },
   guideItem: {
     fontFamily: 'monospace',
-    fontSize: 9,
+    fontSize: 10,
     color: Colors.textMuted,
     letterSpacing: 0.3,
-    lineHeight: 16,
+    lineHeight: 18,
   },
 });
 

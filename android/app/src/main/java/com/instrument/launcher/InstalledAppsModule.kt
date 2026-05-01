@@ -123,7 +123,14 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
             val pm = reactApplicationContext.packageManager
             val launchIntent = pm.getLaunchIntentForPackage(packageName)
             if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // FLAG_ACTIVITY_NEW_TASK: Launch in a separate task (required from non-Activity context)
+                // FLAG_ACTIVITY_RESET_TASK_IF_NEEDED: If the app's task already exists, clear back to
+                //   its root activity — same behavior as stock launchers. Without this, re-launching
+                //   an app that opened deep internal screens (App A → App B → share dialog)
+                //   would resume at the deep screen instead of the app's main screen.
+                launchIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                )
                 reactApplicationContext.startActivity(launchIntent)
                 promise.resolve(true)
             } else {
