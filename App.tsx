@@ -121,12 +121,12 @@ const App = () => {
             <Stack.Screen
               name="AppDrawer"
               component={AppDrawerWithBoundary}
-              options={{animation: 'fade_from_bottom', animationDuration: 180}}
+              options={{animation: 'fade', animationDuration: 120}}
             />
             <Stack.Screen
               name="Settings"
               component={SettingsWithBoundary}
-              options={{animation: 'fade_from_bottom', animationDuration: 150}}
+              options={{animation: 'fade', animationDuration: 100}}
             />
             <Stack.Screen
               name="Terminal"
