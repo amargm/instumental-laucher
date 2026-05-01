@@ -260,7 +260,202 @@ These were removed in v1.2 sprint and no longer exist in the codebase:
 
 ---
 
-## 🔍 Terminal Audit — Corner Cases, Bugs, UX Improvements
+## � Production Readiness Audit — Pre-Play Store
+
+> Audit date: May 2026 (post v1.3.2)
+> Scope: permissions, manifest, build config, UI completeness, dead code, native modules, resources
+
+### 🔴 CRITICAL — Must Fix Before Play Store
+
+**C1. Missing location permission for WiFi SSID**
+- `DeviceInfoModule.kt` line 71 fetches `wm.connectionInfo.ssid`
+- Android 8.1+ requires `ACCESS_COARSE_LOCATION` (or `ACCESS_FINE_LOCATION`) at runtime to read SSID
+- Without it: SSID returns `<unknown ssid>` on most devices → already partially handled in UI but the permission is never requested
+- **Files**: `AndroidManifest.xml` — add `<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>`
+- **Files**: `DeviceInfoModule.kt` — add runtime permission check before SSID access
+- **Status**: ❌ Not started
+
+**C2. No release signing config**
+- `android/app/build.gradle` line 29-34: `release {}` block has no `signingConfig`
+- Play Store REQUIRES signed APK/AAB with a release keystore
+- Need: generate keystore, create `signingConfigs.release`, add to `buildTypes.release`
+- **Status**: ❌ Not started
+
+**C3. Missing launcher icon PNG fallbacks**
+- Only `mipmap-anydpi-v26/ic_launcher.xml` exists (adaptive icon for API 26+)
+- No `mipmap-hdpi/`, `mipmap-mdpi/`, `mipmap-xhdpi/`, `mipmap-xxhdpi/`, `mipmap-xxxhdpi/` PNG fallbacks
+- Devices on Android 7.1 and below (API < 26) = no icon visible, blank/crash
+- `minSdkVersion` is 23 (Android 6.0) so this affects real users
+- Need: generate PNG icons for all densities OR raise `minSdkVersion` to 26
+- **Status**: ❌ Not started
+
+**C4. versionCode/versionName strategy**
+- `build.gradle`: `versionCode 1`, `versionName "1.0"` hardcoded
+- Every Play Store update requires incremented `versionCode`
+- Should either automate via CI or document manual process
+- **Status**: ❌ Not started
+
+---
+
+### 🟠 HIGH — Bad UX or Missing for Production
+
+**H1. Dead file: NotificationScreen.tsx**
+- 250+ lines, fully compiled but unreachable (not in App.tsx navigation stack)
+- Replaced by TerminalScreen in v1.3 but never deleted
+- Dead code increases bundle size
+- **Action**: Delete the file
+
+**H2. Dead method: expandNotificationPanel() in InstalledApps**
+- `InstalledAppsModule.kt` line 134: Returns error "Use DeviceInfo module"
+- `InstalledApps.ts`: Exported but never called anywhere
+- **Action**: Remove from both native module and TS bridge
+
+**H3. Dead export: getBatteryLevel() in DeviceInfo**
+- Superseded by `getBatteryInfo()`, never called
+- **Action**: Remove from DeviceInfoModule.kt and DeviceInfo.ts
+
+**H4. Dead export: openSoundSettings() in DeviceInfo**
+- Exported in DeviceInfo.ts, never called by any screen
+- **Action**: Remove from both native and TS
+
+**H5. Unused Typography export in tokens.ts**
+- Exported but never imported anywhere
+- **Action**: Remove
+
+**H6. BootReceiver has no error handling**
+- `BootReceiver.kt`: Directly calls `context.startActivity()` with no try-catch
+- If MainActivity fails to start (e.g. React Native not initialized), this crashes on boot
+- **Fix**: Wrap in try-catch
+
+**H7. No runtime permission request UI for WiFi SSID**
+- Even after adding the manifest permission (C1), Android 6+ requires runtime request
+- Need: Permission request dialog when user first opens the app
+- Current behavior: silently fails → shows "WiFi" instead of actual SSID name
+- Not critical for functionality but degrades terminal/dashboard experience
+
+**H8. Weather shows confusing placeholder**
+- HomeScreen shows `-- °C · ---` when weather fails to load
+- No retry button, no error indication
+- Terminal `weather` command at least shows "✕ weather unavailable"
+- **Fix**: Show muted "tap to retry" on home screen, or cache last successful weather
+
+**H9. Calculator uses Function() eval**
+- `commandParser.ts` line 185: `Function("use strict"; return (expr))()`
+- Regex validation `/^[\d\s+\-*/().%*^]+$/` is decent but not bulletproof
+- Play Store policy doesn't block this, but it's a known security pattern
+- **Recommendation**: Replace with simple math parser (low priority, regex is sufficient for now)
+
+---
+
+### 🟡 MEDIUM — Polish Before Release
+
+**M1. MUSIC_KEYWORDS duplicated**
+- Defined in HomeScreen.tsx line 39 AND AppDrawerScreen.tsx
+- Should extract to `constants.ts` for single source of truth
+
+**M2. Magic numbers scattered in HomeScreen**
+- `30 * 60 * 1000` (pet feed interval), `5 * 60 * 1000` (pickup spam), etc.
+- Should extract to constants.ts: `PET_FEED_INTERVAL_MS`, `PICKUP_SPAM_THRESHOLD_MS`
+
+**M3. AppDrawer icon cache has no size limit**
+- Module-scoped `iconCache: Record<string, string>` grows unbounded
+- Unlikely to be a real problem (most phones have <200 apps) but not ideal
+
+**M4. Console.warn calls in production**
+- `AppDrawerScreen.tsx` line 156: `console.warn('Failed to load apps:')`
+- Should use error boundary or silent logging instead
+
+**M5. NavItem component duplicated**
+- Identical `NavItem` in AppDrawerScreen.tsx and SettingsScreen.tsx
+- Should extract to `src/components/NavItem.tsx`
+
+**M6. No privacy policy URL**
+- Play Store requires privacy policy for apps that access device info
+- This app accesses: battery, connectivity, installed apps, notifications
+- Need: hosted privacy policy page + link in store listing
+- Can be a simple GitHub Pages or Google Docs link
+
+**M7. Proguard rules look good**
+- Keeps Hermes, React Native bridge, SVG, Reanimated classes
+- Keeps all `com.instrument.launcher` classes
+- No issues found
+
+**M8. No app update mechanism**
+- No in-app update prompt for new versions
+- Not required for first release but needed eventually
+
+---
+
+### 🟢 LOW — Nice to Have
+
+**L1. `app.json` is minimal**
+- Only has `name` and `displayName`
+- Should add `version`, `description` for tooling/CI
+
+**L2. tsconfig.json deprecation warnings**
+- `moduleResolution: "node"` and `baseUrl: "."` trigger TS warnings
+- Won't break now but will in future TypeScript versions
+- Non-blocking for Play Store
+
+**L3. No crash log export**
+- ErrorBoundary persists last 10 crashes to AsyncStorage
+- But users can't access/share them
+- Could add a "View Crash Logs" button in Settings (debug section)
+
+**L4. Clipboard import deprecated**
+- `TerminalScreen.tsx` imports `Clipboard` from `react-native`
+- Deprecated in favor of `@react-native-clipboard/clipboard`
+- Still works in RN 0.73 but will be removed eventually
+
+---
+
+### 📋 Pre-Release Checklist
+
+```
+PERMISSIONS & MANIFEST
+[ ] Add ACCESS_COARSE_LOCATION to AndroidManifest.xml (C1)
+[ ] Add runtime permission request for location (H7)
+[ ] Verify all permissions are declared for used features ✅ Done (rest is OK)
+
+BUILD & SIGNING
+[ ] Generate release keystore (C2)
+[ ] Add signingConfigs.release to build.gradle (C2)
+[ ] Set versionCode and versionName strategy (C4)
+[ ] Test release build with Proguard ✅ Rules look correct
+
+ICONS & RESOURCES
+[ ] Generate PNG launcher icons for all densities (C3)
+[ ] Verify adaptive icon renders correctly on API 26+ ✅ Done
+[ ] Splash screen colors match app theme ✅ Done
+
+DEAD CODE CLEANUP
+[ ] Delete NotificationScreen.tsx (H1)
+[ ] Remove expandNotificationPanel from InstalledApps module (H2)
+[ ] Remove getBatteryLevel from DeviceInfo module (H3)
+[ ] Remove openSoundSettings from DeviceInfo module (H4)
+[ ] Remove unused Typography export (H5)
+
+CODE QUALITY
+[ ] Extract MUSIC_KEYWORDS to constants.ts (M1)
+[ ] Extract magic numbers to constants.ts (M2)
+[ ] Add try-catch to BootReceiver (H6)
+[ ] Replace console.warn with silent handling (M4)
+[ ] Test weather failure UX (H8)
+
+PLAY STORE METADATA
+[ ] Create privacy policy page (M6)
+[ ] Prepare store listing (title, description, screenshots)
+[ ] Prepare feature graphic (1024x500)
+[ ] Prepare screenshots for phone/tablet (min 2)
+[ ] Write short description (80 chars) and full description (4000 chars)
+[ ] Select app category: Tools > Launcher
+[ ] Content rating questionnaire
+[ ] Set up pricing: Free
+```
+
+---
+
+## �🔍 Terminal Audit — Corner Cases, Bugs, UX Improvements
 
 > Full audit of TerminalScreen.tsx + commandParser.ts as of v1.3.1
 > Updated: post v1.3.2 bug fix + polish pass
