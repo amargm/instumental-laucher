@@ -110,3 +110,13 @@ export const DeviceInfoEvents = new NativeEventEmitter(DeviceInfo);
 export async function isHeadphonesConnected(): Promise<boolean> {
   return DeviceInfo.isHeadphonesConnected();
 }
+
+export interface AudioDeviceInfo {
+  connected: boolean;
+  name: string;
+  type: 'bluetooth' | 'wired' | 'usb' | 'none' | 'unknown';
+}
+
+export async function getConnectedAudioDevice(): Promise<AudioDeviceInfo> {
+  return DeviceInfo.getConnectedAudioDevice();
+}

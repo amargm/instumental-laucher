@@ -252,4 +252,48 @@ class DeviceInfoModule(reactContext: ReactApplicationContext) :
             promise.resolve(false)
         }
     }
+
+    @ReactMethod
+    fun getConnectedAudioDevice(promise: Promise) {
+        try {
+            val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val headphoneTypes = setOf(
+                android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                android.media.AudioDeviceInfo.TYPE_USB_HEADSET
+            )
+            val device = devices.firstOrNull { it.type in headphoneTypes }
+            if (device != null) {
+                val result = Arguments.createMap()
+                result.putBoolean("connected", true)
+                val name = device.productName?.toString() ?: ""
+                result.putString("name", name)
+                val type = when (device.type) {
+                    android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                    android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
+                    android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                    android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired"
+                    android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> "usb"
+                    else -> "unknown"
+                }
+                result.putString("type", type)
+                promise.resolve(result)
+            } else {
+                val result = Arguments.createMap()
+                result.putBoolean("connected", false)
+                result.putString("name", "")
+                result.putString("type", "none")
+                promise.resolve(result)
+            }
+        } catch (e: Exception) {
+            val result = Arguments.createMap()
+            result.putBoolean("connected", false)
+            result.putString("name", "")
+            result.putString("type", "none")
+            promise.resolve(result)
+        }
+    }
 }

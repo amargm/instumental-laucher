@@ -11,6 +11,9 @@ import {
   Animated,
   Dimensions,
   Modal,
+  LayoutAnimation,
+  UIManager,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -22,12 +25,20 @@ import ReanimatedAnimated, {
 } from 'react-native-reanimated';
 import {Colors, Spacing, Radius} from '../theme/tokens';
 import {launchApp, getInstalledApps, AppInfo} from '../native/InstalledApps';
+import {getConnectedAudioDevice, AudioDeviceInfo} from '../native/DeviceInfo';
 import {STORAGE_KEYS} from '../constants';
 import {tick, impact, heavy} from '../native/Haptics';
 import {
   SettingsIcon,
 } from '../components/AppIcons';
 import {APP_ICON_MAP} from '../components/AppIcons';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const MUSIC_KEYWORDS = ['music', 'spotify', 'player', 'podcast', 'audio', 'sound', 'radio', 'gaana', 'wynk', 'jiosaavn', 'youtube music'];
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 
@@ -332,6 +343,11 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
   const [petHealth, setPetHealth] = useState(50);
   const [gesturesEnabled, setGesturesEnabled] = useState(true);
   const [showHints, setShowHints] = useState(false);
+  const [audioDevice, setAudioDevice] = useState<AudioDeviceInfo>({connected: false, name: '', type: 'none'});
+  const [musicAppsOpen, setMusicAppsOpen] = useState(false);
+  const musicBtnOpacity = useRef(new Animated.Value(0)).current;
+  const musicBtnScale = useRef(new Animated.Value(0.8)).current;
+  const prevConnectedRef = useRef(false);
   const mountedRef = useRef(true);
   const gesturesRef = useRef(true);
 
@@ -508,6 +524,85 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
     };
   }, []);
 
+  // Headphone detection — poll on mount, focus, and interval
+  useEffect(() => {
+    let mounted = true;
+    const checkAudio = async () => {
+      try {
+        const device = await getConnectedAudioDevice();
+        if (!mounted) return;
+        const wasConnected = prevConnectedRef.current;
+        prevConnectedRef.current = device.connected;
+        setAudioDevice(device);
+
+        if (device.connected && !wasConnected) {
+          // Headphones just connected — fade in music button
+          Animated.parallel([
+            Animated.timing(musicBtnOpacity, {toValue: 1, duration: 400, useNativeDriver: true}),
+            Animated.spring(musicBtnScale, {toValue: 1, useNativeDriver: true, friction: 6, tension: 60}),
+          ]).start();
+        } else if (!device.connected && wasConnected) {
+          // Headphones just disconnected — fade out music button & collapse list
+          setMusicAppsOpen(false);
+          Animated.parallel([
+            Animated.timing(musicBtnOpacity, {toValue: 0, duration: 400, useNativeDriver: true}),
+            Animated.timing(musicBtnScale, {toValue: 0.8, duration: 300, useNativeDriver: true}),
+          ]).start();
+        } else if (device.connected) {
+          // Already connected on mount — show button immediately
+          musicBtnOpacity.setValue(1);
+          musicBtnScale.setValue(1);
+        }
+      } catch (e) {}
+    };
+
+    checkAudio();
+    const interval = setInterval(checkAudio, 5000); // poll every 5s
+    return () => { mounted = false; clearInterval(interval); };
+  }, [musicBtnOpacity, musicBtnScale]);
+
+  // Also refresh audio on screen focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        const device = await getConnectedAudioDevice();
+        if (!mountedRef.current) return;
+        const wasConnected = prevConnectedRef.current;
+        prevConnectedRef.current = device.connected;
+        setAudioDevice(device);
+        if (device.connected && !wasConnected) {
+          Animated.parallel([
+            Animated.timing(musicBtnOpacity, {toValue: 1, duration: 400, useNativeDriver: true}),
+            Animated.spring(musicBtnScale, {toValue: 1, useNativeDriver: true, friction: 6, tension: 60}),
+          ]).start();
+        } else if (!device.connected && wasConnected) {
+          setMusicAppsOpen(false);
+          Animated.parallel([
+            Animated.timing(musicBtnOpacity, {toValue: 0, duration: 400, useNativeDriver: true}),
+            Animated.timing(musicBtnScale, {toValue: 0.8, duration: 300, useNativeDriver: true}),
+          ]).start();
+        } else if (device.connected) {
+          musicBtnOpacity.setValue(1);
+          musicBtnScale.setValue(1);
+        }
+      } catch (e) {}
+    });
+    return unsubscribe;
+  }, [navigation, musicBtnOpacity, musicBtnScale]);
+
+  // Compute music apps from installed apps
+  const musicApps = installedApps.filter(app => {
+    const name = app.name.toLowerCase();
+    const pkg = app.packageName.toLowerCase();
+    return MUSIC_KEYWORDS.some(kw => name.includes(kw) || pkg.includes(kw));
+  });
+
+  const toggleMusicApps = useCallback(() => {
+    tick();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setMusicAppsOpen(prev => !prev);
+  }, []);
+
   // Pixel Pet — health based on low screen time (fed on every focus if > 30min gap)
   useEffect(() => {
     const loadPet = async () => {
@@ -635,10 +730,15 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
             <ClockWidget clockFormat={clockFormat} accentColor={accentColor} glitchEnabled={glitchEnabled} parallaxEnabled={parallaxEnabled} />
           </Animated.View>
 
-          {/* Weather — staggered + fade on update */}
+          {/* Weather + headphone indicator — staggered + fade on update */}
           <Animated.View style={{opacity: weatherAnim, transform: [{translateX: weatherAnim.interpolate({inputRange: [0, 1], outputRange: [-12, 0]})}]}}>
             <Text style={styles.weather}>
               {weather ? `${weather.temp} · ${weather.condition}` : '-- °C · ---'}
+              {audioDevice.connected ? (
+                <Text style={styles.headphoneIndicator}>
+                  {'  🎧 '}{audioDevice.name || (audioDevice.type === 'wired' ? 'Wired' : 'Audio')}
+                </Text>
+              ) : null}
             </Text>
           </Animated.View>
 
@@ -705,6 +805,38 @@ const HomeScreen: React.FC<Props> = ({navigation}) => {
                   })}
                 </ScrollView>
               </View>
+            </Animated.View>
+          )}
+
+          {/* Headphone Music Mode — toggle button + collapsible music apps list */}
+          {audioDevice.connected && musicApps.length > 0 && (
+            <Animated.View style={[styles.musicModeWrap, {opacity: musicBtnOpacity, transform: [{scale: musicBtnScale}]}]}>
+              <TouchableOpacity
+                style={[styles.musicToggleBtn, musicAppsOpen && {borderColor: accentColor}]}
+                activeOpacity={0.7}
+                onPress={toggleMusicApps}>
+                <Text style={[styles.musicToggleText, musicAppsOpen && {color: accentColor}]}>
+                  🎧 {musicAppsOpen ? 'HIDE' : 'MUSIC'}
+                </Text>
+              </TouchableOpacity>
+              {musicAppsOpen && (
+                <View style={styles.musicAppsList}>
+                  {musicApps.map(app => (
+                    <TouchableOpacity
+                      key={app.packageName}
+                      style={styles.musicAppItem}
+                      activeOpacity={0.6}
+                      onPress={() => launchWithAnimation(app.packageName)}>
+                      <View style={styles.musicAppIcon}>
+                        {APP_ICON_MAP[app.packageName]
+                          ? React.createElement(APP_ICON_MAP[app.packageName], {size: 14, color: Colors.textPrimary})
+                          : <Text style={styles.musicAppLetter}>{app.name.charAt(0).toUpperCase()}</Text>}
+                      </View>
+                      <Text style={styles.musicAppName} numberOfLines={1}>{app.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </Animated.View>
           )}
         </View>
@@ -943,6 +1075,64 @@ const styles = StyleSheet.create({
     marginTop: 4,
     letterSpacing: 0.3,
     textAlign: 'center',
+  },
+  // Headphone indicator
+  headphoneIndicator: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    letterSpacing: 0.3,
+  },
+  // Music mode
+  musicModeWrap: {
+    marginTop: Spacing.md,
+  },
+  musicToggleBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sharp,
+  },
+  musicToggleText: {
+    fontFamily: 'monospace',
+    fontSize: 10,
+    color: Colors.textMuted,
+    letterSpacing: 1.5,
+  },
+  musicAppsList: {
+    marginTop: Spacing.sm,
+    gap: 2,
+  },
+  musicAppItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  musicAppIcon: {
+    width: 28,
+    height: 28,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sharp,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
+  },
+  musicAppLetter: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  musicAppName: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: Colors.textSecondary,
+    letterSpacing: 0.5,
+    flex: 1,
   },
   settingsBtn: {
     position: 'absolute',

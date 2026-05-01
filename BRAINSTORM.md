@@ -575,7 +575,7 @@ This replaces the notification screen entirely. Users who want notifications swi
 
 **Improvements:**
 1. **Live headphone listener** — Use `AudioManager.registerAudioDeviceCallback()` in Kotlin to emit events on connect/disconnect. React-side listens via `DeviceInfoEvents`.
-2. **Headphone mode on home screen** — When headphones connect, show a subtle `🎧` indicator next to weather. Below the Quick-access row , a new button fades in slowly with cool animation (like the filter in the app list) which when clicked shows the list of music apps in the home screen itself) music apps (Spotify, YT Music, podcast app, phone/contacts) and one more tap on the same button . When unplugged, button filters fades out
+2. **Headphone mode on home screen** — When headphones connect, show a subtle `🎧` indicator next to weather. Below the Quick-access row , a new button fades in slowly with cool animation (like the filter in the app list) which when clicked shows the list of music apps in the home screen itself) music apps (Spotify, YT Music, podcast app, phone/contacts) and one more tap on the same button collapse the list of music apps..like a toggle button. When unplugged, button filters fades out with same cool animation slowly.
 3. **Bluetooth device name** — Show `🎧 AirPods Pro` or `🎧 WH-1000XM5` instead of generic icon. The AudioDevice API gives device names.
 4. **Audio route quick-switch** — If multiple audio outputs detected (speaker + BT), show a tiny toggle.
 
